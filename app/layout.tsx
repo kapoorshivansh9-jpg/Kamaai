@@ -1,12 +1,14 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { Manrope, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { Sidebar } from "@/components/sidebar";
 import { Toaster } from "@/components/ui/sonner";
+import { Providers } from "@/lib/providers";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
+const manrope = Manrope({
+  variable: "--font-manrope",
   subsets: ["latin"],
+  weight: ["400", "500", "600", "700", "800"],
 });
 
 const geistMono = Geist_Mono({
@@ -15,8 +17,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "StudyHub — Your Academic Command Centre",
-  description: "Track assignments, summarise notes, manage your schedule, and format citations — all in one place.",
+  title: "RideKamao — Shift Intelligence",
+  description: "Smart shift plans, heat safety, and gig worker rights for Delhi NCR riders.",
 };
 
 export default function RootLayout({
@@ -25,13 +27,23 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}>
+    <html lang="en" className={`${manrope.variable} ${geistMono.variable} h-full antialiased`}>
+      <head>
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
+        <link
+          href="https://fonts.googleapis.com/css2?family=Noto+Sans+Devanagari:wght@400;500;600;700&display=swap"
+          rel="stylesheet"
+        />
+      </head>
       <body className="h-full flex bg-background text-foreground">
-        <Sidebar />
-        <main className="flex-1 overflow-y-auto">
-          {children}
-        </main>
-        <Toaster richColors position="top-right" />
+        <Providers>
+          <Sidebar />
+          <main className="flex-1 min-h-0 flex flex-col overflow-y-auto">
+            {children}
+          </main>
+          <Toaster richColors position="top-right" />
+        </Providers>
       </body>
     </html>
   );
