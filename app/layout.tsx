@@ -1,12 +1,13 @@
 import type { Metadata } from "next";
-import { Manrope, Geist_Mono } from "next/font/google";
+import { Plus_Jakarta_Sans, Geist_Mono } from "next/font/google";
 import "./globals.css";
-import { Sidebar } from "@/components/sidebar";
 import { Toaster } from "@/components/ui/sonner";
 import { Providers } from "@/lib/providers";
+import { BottomNav } from "@/components/bottom-nav";
+import { ProfileSheet } from "@/components/profile-sheet";
 
-const manrope = Manrope({
-  variable: "--font-manrope",
+const plusJakarta = Plus_Jakarta_Sans({
+  variable: "--font-jakarta",
   subsets: ["latin"],
   weight: ["400", "500", "600", "700", "800"],
 });
@@ -18,17 +19,17 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: "RideKamao — Shift Intelligence",
-  description: "Smart shift plans, heat safety, and gig worker rights for Delhi NCR riders.",
+  description: "Smart shift plans for Delhi NCR gig workers. Beat the heat, earn more, know your rights.",
+  manifest: "/manifest.json",
+  appleWebApp: { capable: true, statusBarStyle: "black-translucent", title: "RideKamao" },
+  viewport: { width: "device-width", initialScale: 1, maximumScale: 1, userScalable: false },
 };
 
-export default function RootLayout({
-  children,
-}: Readonly<{
-  children: React.ReactNode;
-}>) {
+export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" className={`${manrope.variable} ${geistMono.variable} h-full antialiased`}>
+    <html lang="en" className={`${plusJakarta.variable} ${geistMono.variable} h-full`}>
       <head>
+        <meta name="theme-color" content="#0C9267" />
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
         <link
@@ -36,13 +37,18 @@ export default function RootLayout({
           rel="stylesheet"
         />
       </head>
-      <body className="h-full flex bg-background text-foreground">
+      <body className="h-full antialiased" style={{ background: "var(--rk-bg)" }}>
         <Providers>
-          <Sidebar />
-          <main className="flex-1 min-h-0 flex flex-col overflow-y-auto">
-            {children}
-          </main>
-          <Toaster richColors position="top-right" />
+          {/* Centred app shell */}
+          <div style={{ maxWidth: 480, margin: "0 auto", minHeight: "100dvh", position: "relative", display: "flex", flexDirection: "column" }}>
+            {/* Page content — padded above bottom nav */}
+            <main className="flex-1 flex flex-col min-h-0 overflow-y-auto pb-[64px]">
+              {children}
+            </main>
+            <BottomNav />
+          </div>
+          <ProfileSheet />
+          <Toaster richColors position="top-center" />
         </Providers>
       </body>
     </html>

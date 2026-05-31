@@ -1,0 +1,13 @@
+{
+  "name": "RideKamao — Shift Intelligence",
+  "short_name": "RideKamao",
+  "description": "Smart shift plans for Delhi NCR gig workers. Beat the heat, earn more, know your rights.",
+  "start_url": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0E9A6E",
+  "theme_color": "#0E9A6E",
+  "icons": [
+    { "src": "/favicon.ico", "sizes": "48x48", "type": "image/x-icon" }
+  ]
+}

@@ -7,9 +7,8 @@
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-manrope);
+  --font-sans: var(--font-jakarta);
   --font-mono: var(--font-geist-mono);
-  --font-heading: var(--font-manrope);
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -18,11 +17,6 @@
   --color-sidebar-primary: var(--sidebar-primary);
   --color-sidebar-foreground: var(--sidebar-foreground);
   --color-sidebar: var(--sidebar);
-  --color-chart-5: var(--chart-5);
-  --color-chart-4: var(--chart-4);
-  --color-chart-3: var(--chart-3);
-  --color-chart-2: var(--chart-2);
-  --color-chart-1: var(--chart-1);
   --color-ring: var(--ring);
   --color-input: var(--input);
   --color-border: var(--border);
@@ -49,133 +43,97 @@
 }
 
 :root {
-  /* RideKamao green primary */
-  --background: oklch(0.98 0.005 163);
-  --foreground: oklch(0.12 0.025 163);
+  --background: oklch(0.97 0.012 163);
+  --foreground: oklch(0.12 0.03 163);
   --card: oklch(1 0 0);
-  --card-foreground: oklch(0.12 0.025 163);
+  --card-foreground: oklch(0.12 0.03 163);
   --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.12 0.025 163);
-  --primary: oklch(0.58 0.13 163);
+  --popover-foreground: oklch(0.12 0.03 163);
+  --primary: oklch(0.57 0.155 163);
   --primary-foreground: oklch(0.99 0.005 163);
-  --secondary: oklch(0.93 0.03 163);
-  --secondary-foreground: oklch(0.22 0.04 163);
-  --muted: oklch(0.93 0.015 163);
-  --muted-foreground: oklch(0.52 0.025 163);
-  --accent: oklch(0.91 0.04 163);
-  --accent-foreground: oklch(0.22 0.06 163);
+  --secondary: oklch(0.91 0.04 163);
+  --secondary-foreground: oklch(0.2 0.05 163);
+  --muted: oklch(0.91 0.025 163);
+  --muted-foreground: oklch(0.5 0.03 163);
+  --accent: oklch(0.88 0.06 163);
+  --accent-foreground: oklch(0.2 0.08 163);
   --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.89 0.02 163);
-  --input: oklch(0.89 0.02 163);
-  --ring: oklch(0.58 0.13 163);
-  --chart-1: oklch(0.58 0.13 163);
-  --chart-2: oklch(0.65 0.15 140);
-  --chart-3: oklch(0.62 0.18 30);
-  --chart-4: oklch(0.72 0.12 200);
-  --chart-5: oklch(0.7 0.2 60);
+  --border: oklch(0.87 0.03 163);
+  --input: oklch(0.87 0.03 163);
+  --ring: oklch(0.57 0.155 163);
   --radius: 0.75rem;
-  --sidebar: oklch(0.12 0.025 163);
-  --sidebar-foreground: oklch(0.9 0.01 163);
-  --sidebar-primary: oklch(0.58 0.13 163);
-  --sidebar-primary-foreground: oklch(0.99 0.005 163);
-  --sidebar-accent: oklch(0.2 0.03 163);
-  --sidebar-accent-foreground: oklch(0.9 0.01 163);
-  --sidebar-border: oklch(0.25 0.03 163);
-  --sidebar-ring: oklch(0.58 0.13 163);
 
-  /* RideKamao design tokens */
-  --rk-green: #0E9A6E;
-  --rk-green-700: #057A55;
-  --rk-green-600: #0B8C63;
-  --rk-green-800: #04603F;
-  --rk-green-50: #E8F6EF;
-  --rk-green-100: #D2EEE0;
-  --rk-ink: #0C1A14;
-  --rk-ink-2: #27352E;
-  --rk-muted: #5E6E66;
-  --rk-faint: #8A9A92;
-  --rk-line: #E3EAE6;
-  --rk-line-2: #EEF3F0;
-  --rk-surface: #FFFFFF;
-  --rk-bg: #EEF3F0;
-  --rk-amber: #E08A0B;
-  --rk-amber-bg: #FBEBCF;
-  --rk-amber-ink: #8A5208;
-  --rk-red: #D6453F;
-  --rk-red-bg: #FAE0DE;
-  --rk-red-ink: #92231F;
-  --rk-blue: #2563EB;
-  --rk-blue-bg: #E4ECFC;
-  --rk-blue-ink: #1B43A8;
-  --rk-safe: #23A455;
-  --rk-mod: #E0A50B;
-  --rk-high: #E0700B;
-  --rk-ext: #D6453F;
-  --rk-shadow: 0 1px 2px rgba(12,26,20,.06), 0 8px 24px -12px rgba(12,26,20,.18);
-  --rk-shadow-lg: 0 2px 6px rgba(12,26,20,.08), 0 24px 60px -24px rgba(12,26,20,.32);
-}
-
-.dark {
-  --background: oklch(0.12 0.02 163);
-  --foreground: oklch(0.95 0.01 163);
-  --card: oklch(0.17 0.025 163);
-  --card-foreground: oklch(0.95 0.01 163);
-  --popover: oklch(0.17 0.025 163);
-  --popover-foreground: oklch(0.95 0.01 163);
-  --primary: oklch(0.65 0.14 163);
-  --primary-foreground: oklch(0.99 0.005 163);
-  --secondary: oklch(0.22 0.03 163);
-  --secondary-foreground: oklch(0.95 0.01 163);
-  --muted: oklch(0.22 0.025 163);
-  --muted-foreground: oklch(0.62 0.025 163);
-  --accent: oklch(0.28 0.06 163);
-  --accent-foreground: oklch(0.9 0.04 163);
-  --destructive: oklch(0.704 0.191 22.216);
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 12%);
-  --ring: oklch(0.65 0.14 163);
-  --chart-1: oklch(0.65 0.14 163);
-  --chart-2: oklch(0.7 0.15 140);
-  --chart-3: oklch(0.72 0.15 30);
-  --chart-4: oklch(0.75 0.12 200);
-  --chart-5: oklch(0.7 0.2 60);
-  --sidebar: oklch(0.1 0.02 163);
-  --sidebar-foreground: oklch(0.9 0.01 163);
-  --sidebar-primary: oklch(0.65 0.14 163);
-  --sidebar-primary-foreground: oklch(0.99 0.005 163);
-  --sidebar-accent: oklch(0.18 0.03 163);
-  --sidebar-accent-foreground: oklch(0.9 0.01 163);
-  --sidebar-border: oklch(1 0 0 / 8%);
-  --sidebar-ring: oklch(0.65 0.14 163);
+  /* RideKamao design tokens — more vibrant */
+  --rk-green:     #0C9267;
+  --rk-green-700: #056B4A;
+  --rk-green-600: #0A8460;
+  --rk-green-50:  #DFF5EB;
+  --rk-green-100: #C0EDD8;
+  --rk-ink:       #0A1812;
+  --rk-ink-2:     #1F3028;
+  --rk-muted:     #506058;
+  --rk-faint:     #7A9088;
+  --rk-line:      #C8DFCF;
+  --rk-line-2:    #E2F0E8;
+  --rk-surface:   #FFFFFF;
+  --rk-bg:        #E8F5EE;
+  --rk-amber:     #D97B00;
+  --rk-amber-bg:  #FEF0D6;
+  --rk-amber-ink: #7A4400;
+  --rk-red:       #C93B35;
+  --rk-red-bg:    #FDE8E7;
+  --rk-red-ink:   #7A1F1B;
+  --rk-blue:      #1E56D4;
+  --rk-blue-bg:   #DCE9FF;
+  --rk-blue-ink:  #0F2E82;
+  --rk-safe:      #1E9C47;
+  --rk-mod:       #D97B00;
+  --rk-high:      #D45C00;
+  --rk-ext:       #C93B35;
 }
 
 @layer base {
-  * {
-    @apply border-border outline-ring/50;
-  }
-  body {
-    @apply bg-background text-foreground;
-  }
-  html {
-    @apply font-sans;
-  }
+  * { @apply border-border outline-ring/50; }
+  body { @apply bg-[var(--rk-bg)] text-[var(--rk-ink)]; }
+  html { @apply font-sans; }
 }
 
-/* RideKamao page styles */
-.rk-page {
-  background: var(--rk-bg);
-  color: var(--rk-ink);
-}
-.rk-surface {
-  background: var(--rk-surface);
-}
+/* Utility classes */
 .noscroll::-webkit-scrollbar { display: none; }
 .noscroll { scrollbar-width: none; }
 .tabular { font-variant-numeric: tabular-nums; font-feature-settings: "tnum"; }
-.dvg { font-family: 'Noto Sans Devanagari', var(--font-manrope), system-ui, sans-serif; }
+.dvg { font-family: 'Noto Sans Devanagari', var(--font-jakarta), system-ui, sans-serif; }
 
-@keyframes rk-fadeUp { from { transform: translateY(12px); opacity: 0; } to { transform: none; opacity: 1; } }
-@keyframes rk-pop { 0% { transform: scale(.97); } 100% { transform: scale(1); } }
-@keyframes rk-pulse { 0%, 100% { opacity: 1; } 50% { opacity: .45; } }
-@keyframes rk-blink { 0%, 80%, 100% { opacity: .25; transform: translateY(0); } 40% { opacity: 1; transform: translateY(-3px); } }
-@keyframes rk-dash { to { stroke-dashoffset: 0; } }
+/* App shell — mobile-first centered layout */
+.app-shell {
+  max-width: 480px;
+  margin: 0 auto;
+  min-height: 100dvh;
+  position: relative;
+  background: var(--rk-bg);
+}
+
+@keyframes rk-fadeUp {
+  from { transform: translateY(10px); opacity: 0; }
+  to   { transform: none; opacity: 1; }
+}
+@keyframes rk-pop {
+  0%   { transform: scale(.96); }
+  100% { transform: scale(1); }
+}
+@keyframes rk-pulse {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: .4; }
+}
+@keyframes rk-blink {
+  0%, 80%, 100% { opacity: .2; transform: translateY(0); }
+  40%           { opacity: 1; transform: translateY(-3px); }
+}
+@keyframes rk-slideUp {
+  from { transform: translateY(100%); }
+  to   { transform: translateY(0); }
+}
+@keyframes rk-fadeIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
