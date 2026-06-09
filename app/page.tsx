@@ -3,7 +3,6 @@
 import { useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { motion } from "framer-motion";
 import { useProfile } from "@/lib/ridekamao-profile";
 import { useUI } from "@/lib/ui-context";
 import { PROFESSIONS } from "@/lib/ridekamao-data";
@@ -78,7 +77,7 @@ export default function HomePage() {
         </div>
 
         {/* Greeting */}
-        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: .4 }}>
+        <div style={{ animation: "rk-fadeUp .4s both" }}>
           {!loading && profile ? (
             <>
               <div style={{ fontSize: 14, color: "rgba(255,255,255,.75)", fontWeight: 600, marginBottom: 4 }}>{greeting}</div>
@@ -104,10 +103,10 @@ export default function HomePage() {
               </p>
             </>
           )}
-        </motion.div>
+        </div>
 
         {/* CTA */}
-        <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: .15 }} style={{ marginTop: 24 }}>
+        <div style={{ marginTop: 24, animation: "rk-fadeUp .4s .12s both" }}>
           {!loading && !profile ? (
             <Link
               href="/onboarding"
@@ -137,7 +136,7 @@ export default function HomePage() {
               <ArrowRight size={17} />
             </Link>
           )}
-        </motion.div>
+        </div>
       </div>
 
       {/* Quick nav */}
@@ -147,11 +146,9 @@ export default function HomePage() {
         </div>
         <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
           {features.map((f, i) => (
-            <motion.div
+            <div
               key={f.href}
-              initial={{ opacity: 0, y: 14 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: .1 + i * .07 }}
+              style={{ animation: `rk-fadeUp .4s ${0.1 + i * 0.07}s both` }}
             >
               <Link
                 href={f.href}
@@ -172,7 +169,7 @@ export default function HomePage() {
                 </div>
                 <ArrowRight size={16} color={G.faint} />
               </Link>
-            </motion.div>
+            </div>
           ))}
         </div>
       </div>
