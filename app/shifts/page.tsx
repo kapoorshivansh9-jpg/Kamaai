@@ -9,18 +9,18 @@ import { trackEvent } from "@/lib/supabase-events";
 import type { ShiftWindow, EarningsCurve, Zone } from "@/lib/ridekamao-data";
 
 const G = {
-  green: "#0C9267", green700: "#056B4A", green600: "#0A8460", green50: "#DFF5EB", green100: "#C0EDD8",
-  ink: "#0A1812", ink2: "#1F3028", muted: "#506058", faint: "#7A9088",
-  line: "#C8DFCF", line2: "#E2F0E8", surface: "#FFFFFF", bg: "#E8F5EE",
-  amber: "#D97B00", amberBg: "#FEF0D6", amberInk: "#7A4400",
-  red: "#C93B35", redBg: "#FDE8E7", redInk: "#7A1F1B",
+  green: "#0A9060", green700: "#045234", green600: "#066B47", green50: "#D8F5E8", green100: "#B4EAD0",
+  ink: "#05160E", ink2: "#163022", muted: "#456055", faint: "#7A9A8A",
+  line: "#BDD8C8", line2: "#DDF0E6", surface: "#FFFFFF", bg: "#EBF7F1",
+  amber: "#C96E00", amberBg: "#FFF0D4", amberInk: "#7A3E00",
+  red: "#B83030", redBg: "#FCEAEA", redInk: "#6B1818",
 };
 
 const TAG = {
-  surge:  { bg: G.amberBg, ink: G.amberInk, bar: `linear-gradient(90deg,${G.amber},#D45C00)` },
-  cool:   { bg: "#DCE9FF", ink: "#0F2E82",   bar: "linear-gradient(90deg,#1E56D4,#0F2E82)" },
-  steady: { bg: G.green50, ink: G.green700,  bar: `linear-gradient(90deg,${G.green},${G.green600})` },
-  avoid:  { bg: G.redBg,   ink: G.redInk,    bar: `linear-gradient(90deg,${G.red},#A02020)` },
+  surge:  { bg: G.amberBg, ink: G.amberInk, bar: `linear-gradient(90deg,${G.amber},#A04A00)`, border: G.amber },
+  cool:   { bg: "#E0EAFF", ink: "#0C2A7A",   bar: "linear-gradient(90deg,#1A4FCC,#0C2A7A)",  border: "#1A4FCC" },
+  steady: { bg: G.green50, ink: G.green700,  bar: `linear-gradient(90deg,${G.green},${G.green600})`, border: G.green },
+  avoid:  { bg: G.redBg,   ink: G.redInk,    bar: `linear-gradient(90deg,${G.red},#7A0000)`,  border: G.red },
 };
 
 const RISK_COLORS = ["#1E9C47", "#D97B00", "#D45C00", "#C93B35"];
@@ -47,35 +47,50 @@ function WindowCard({ w, idx, isAvoid }: { w: ShiftWindow; idx: number; isAvoid:
   }
 
   return (
-    <div style={{ background: G.surface, borderRadius: 18, padding: "14px 16px", marginBottom: 10, border: `1px solid ${G.line}`, boxShadow: "0 2px 8px -4px rgba(10,24,18,.14)", animation: `rk-fadeUp .4s ${idx * 0.06}s both` }}>
-      <button onClick={() => setOpen((o) => !o)} style={{ display: "flex", alignItems: "center", gap: 12, width: "100%", textAlign: "left", background: "none", border: "none", cursor: "pointer", padding: 0 }}>
-        <div style={{ width: 38, height: 38, borderRadius: 11, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", background: idx === 0 ? G.green : G.green50, color: idx === 0 ? "#fff" : G.green700 }}>
-          <span style={{ fontWeight: 800, fontSize: 15, fontVariantNumeric: "tabular-nums" }}>{idx + 1}</span>
+    <div
+      style={{
+        background: G.surface, borderRadius: 18, marginBottom: 10,
+        border: `1px solid ${G.line}`,
+        borderLeft: `3.5px solid ${tag.border}`,
+        boxShadow: "0 2px 4px rgba(5,22,14,.05), 0 12px 28px -8px rgba(5,22,14,.15)",
+        animation: `rk-fadeUp .4s ${idx * 0.06}s both`,
+        overflow: "hidden",
+      }}
+    >
+      <button
+        onClick={() => setOpen((o) => !o)}
+        style={{ display: "flex", alignItems: "center", gap: 14, width: "100%", textAlign: "left", background: "none", border: "none", cursor: "pointer", padding: "15px 16px" }}
+      >
+        {/* Rank badge */}
+        <div style={{ width: 34, height: 34, borderRadius: 10, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", background: idx === 0 ? G.green : G.green50, color: idx === 0 ? "#fff" : G.green700 }}>
+          <span style={{ fontWeight: 800, fontSize: 14, fontVariantNumeric: "tabular-nums" }}>{idx + 1}</span>
         </div>
+
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontWeight: 800, fontSize: 15.5, color: G.ink, fontVariantNumeric: "tabular-nums" }}>{w.time}</div>
-          <div style={{ fontSize: 12, color: G.muted, marginTop: 1 }}>{w.label}</div>
+          {/* Time — big and bold */}
+          <div style={{ fontWeight: 800, fontSize: 18, color: G.ink, fontVariantNumeric: "tabular-nums", letterSpacing: "-.4px", lineHeight: 1.1 }}>{w.time}</div>
+          <div style={{ fontSize: 12, color: G.muted, marginTop: 3, fontWeight: 600 }}>{w.label}</div>
         </div>
+
+        {/* Rate */}
         <div style={{ textAlign: "right", flexShrink: 0 }}>
-          <div style={{ fontWeight: 800, fontSize: 16, color: G.green700, fontVariantNumeric: "tabular-nums" }}>₹{w.rphr}/hr</div>
-          <div style={{ fontSize: 10, color: G.faint, fontWeight: 600, marginTop: 1 }}>{w.mult}× multiplier</div>
+          <div style={{ fontWeight: 800, fontSize: 20, color: G.green700, fontVariantNumeric: "tabular-nums", letterSpacing: "-.5px", lineHeight: 1 }}>₹{w.rphr}</div>
+          <div style={{ fontSize: 10, color: G.faint, fontWeight: 700, marginTop: 3, textTransform: "uppercase", letterSpacing: ".4px" }}>per hour</div>
         </div>
       </button>
 
-      <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 12 }}>
-        <div style={{ flex: 1, height: 6, borderRadius: 3, background: G.line2, overflow: "hidden" }}>
-          <div style={{ width: `${w.demand * 100}%`, height: "100%", borderRadius: 3, background: tag.bar, transition: "width .7s" }} />
+      {/* Demand bar + tag */}
+      <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "0 16px 14px" }}>
+        <div style={{ flex: 1, height: 5, borderRadius: 3, background: G.line2, overflow: "hidden" }}>
+          <div style={{ width: `${w.demand * 100}%`, height: "100%", borderRadius: 3, background: tag.bar, transition: "width .8s cubic-bezier(.4,0,.2,1)" }} />
         </div>
-        <span style={{ padding: "3px 8px", borderRadius: 6, fontSize: 10.5, fontWeight: 700, background: tag.bg, color: tag.ink, flexShrink: 0 }}>{w.tagText}</span>
+        <span style={{ padding: "3px 9px", borderRadius: 7, fontSize: 10.5, fontWeight: 700, background: tag.bg, color: tag.ink, flexShrink: 0, letterSpacing: ".2px" }}>{w.tagText}</span>
       </div>
 
       {open && (
-        <div style={{ display: "flex", gap: 8, marginTop: 11, paddingTop: 11, borderTop: `1px solid ${G.line2}`, animation: "rk-fadeUp .25s both" }}>
-          <Info size={14} color={G.green600} style={{ flexShrink: 0, marginTop: 2 }} />
-          <div>
-            <p style={{ margin: "0 0 4px", fontSize: 12.5, lineHeight: 1.5, color: G.ink2 }}>{w.reason}</p>
-            {w.zoneNote && <p style={{ margin: 0, fontSize: 11.5, color: G.muted, lineHeight: 1.4, fontStyle: "italic" }}>{w.zoneNote}</p>}
-          </div>
+        <div style={{ display: "flex", gap: 10, padding: "12px 16px 14px", borderTop: `1px solid ${G.line2}`, background: `${tag.bg}50`, animation: "rk-fadeUp .25s both" }}>
+          <Info size={13} color={tag.ink} style={{ flexShrink: 0, marginTop: 2 }} />
+          <p style={{ margin: 0, fontSize: 12.5, lineHeight: 1.55, color: G.ink2 }}>{w.reason}</p>
         </div>
       )}
     </div>
@@ -208,7 +223,7 @@ export default function ShiftsPage() {
 
       {/* Today's total hero */}
       <div style={{ margin: "18px 20px 0" }}>
-        <div style={{ borderRadius: 22, padding: "18px 20px", background: "linear-gradient(155deg,#0FA080,#067352 85%)", boxShadow: "0 18px 40px -20px rgba(6,115,82,.55)", position: "relative", overflow: "hidden" }}>
+        <div style={{ borderRadius: 22, padding: "18px 20px", background: "linear-gradient(150deg,#0B6B48,#064D33 60%,#032D1E 100%)", boxShadow: "0 20px 48px -18px rgba(4,77,51,.55)", position: "relative", overflow: "hidden" }}>
           <div style={{ position: "absolute", top: -40, right: -30, width: 160, height: 160, borderRadius: "50%", background: "radial-gradient(circle, rgba(255,255,255,.14), transparent 65%)", pointerEvents: "none" }} />
           <div style={{ position: "relative" }}>
             <div style={{ fontWeight: 700, fontSize: 12, letterSpacing: ".8px", textTransform: "uppercase", color: "rgba(255,255,255,.8)", marginBottom: 10 }}>Today's top 3 windows</div>

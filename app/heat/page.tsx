@@ -5,11 +5,11 @@ import { HEAT } from "@/lib/ridekamao-data";
 import type { HeatMetric, SattuPoint } from "@/lib/ridekamao-data";
 
 const G = {
-  ink: "#0A1812", ink2: "#1F3028", muted: "#506058", faint: "#7A9088",
-  line: "#C8DFCF", line2: "#E2F0E8", surface: "#FFFFFF", bg: "#E8F5EE",
-  green: "#0C9267", green50: "#DFF5EB", green100: "#C0EDD8", green700: "#056B4A",
-  red: "#C93B35", redBg: "#FDE8E7",
-  blue: "#1E56D4", blueBg: "#DCE9FF", blueInk: "#0F2E82",
+  ink: "#05160E", ink2: "#163022", muted: "#456055", faint: "#7A9A8A",
+  line: "#BDD8C8", line2: "#DDF0E6", surface: "#FFFFFF", bg: "#EBF7F1",
+  green: "#0A9060", green50: "#D8F5E8", green100: "#B4EAD0", green700: "#045234",
+  red: "#B83030", redBg: "#FCEAEA",
+  blue: "#1A4FCC", blueBg: "#E0EAFF", blueInk: "#0C2A7A",
 };
 
 const TONE = {
@@ -32,7 +32,7 @@ function MetricTile({ m }: { m: HeatMetric }) {
   const t = TONE[m.tone];
   const Icon = METRIC_ICONS[m.id as keyof typeof METRIC_ICONS] ?? Info;
   return (
-    <div style={{ background: G.surface, borderRadius: 16, padding: "13px 14px", border: `1px solid ${G.line}`, boxShadow: "0 2px 8px -4px rgba(10,24,18,.1)" }}>
+    <div style={{ background: G.surface, borderRadius: 18, padding: "14px 14px", border: `1px solid ${G.line}`, boxShadow: "0 2px 4px rgba(5,22,14,.05), 0 10px 24px -6px rgba(5,22,14,.14)" }}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
         <div style={{ width: 30, height: 30, borderRadius: 9, background: t.bg, display: "flex", alignItems: "center", justifyContent: "center" }}>
           <Icon size={16} color={t.c} strokeWidth={2} />
