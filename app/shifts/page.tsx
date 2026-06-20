@@ -1,11 +1,13 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { MapPin, AlertTriangle, Info, TrendingUp, Clock } from "lucide-react";
+import { MapPin, AlertTriangle, TrendingUp, Clock, Target, Zap, Navigation, Lightbulb, ChevronDown, Wallet } from "lucide-react";
 import { useProfile } from "@/lib/ridekamao-profile";
-import { windowsFor, earningsCurve, detectZone, getProfession } from "@/lib/ridekamao-data";
+import { windowsFor, earningsCurve, detectZone, isWindowActive } from "@/lib/ridekamao-data";
 import { trackEvent } from "@/lib/supabase-events";
+import { useT, useLang, profTitle, localeTag } from "@/lib/i18n";
 import type { ShiftWindow, EarningsCurve, Zone } from "@/lib/ridekamao-data";
 
 const G = {
@@ -25,9 +27,88 @@ const TAG = {
 
 const RISK_COLORS = ["#1E9C47", "#D97B00", "#D45C00", "#C93B35"];
 
-function WindowCard({ w, idx, isAvoid }: { w: ShiftWindow; idx: number; isAvoid: boolean }) {
-  const [open, setOpen] = useState(idx === 0 && !isAvoid);
+function NowBadge() {
+  const t = useT();
+  return (
+    <span style={{ display: "inline-flex", alignItems: "center", gap: 5, padding: "2px 9px", borderRadius: 100, background: G.green, color: "#fff", fontSize: 10, fontWeight: 800, letterSpacing: ".6px", boxShadow: "0 4px 10px -3px rgba(10,144,96,.55)" }}>
+      <span style={{ width: 5, height: 5, borderRadius: "50%", background: "#9BF0CE", display: "inline-block", animation: "rk-pulse 1.4s infinite" }} />
+      {t("shifts.now")}
+    </span>
+  );
+}
+
+const HEAT_CHIP: Record<"peak" | "high" | "good", { bg: string; ink: string; key: "d.peak" | "d.high" | "d.good" }> = {
+  peak: { bg: G.amberBg, ink: G.amberInk, key: "d.peak" },
+  high: { bg: G.green50, ink: G.green700, key: "d.high" },
+  good: { bg: "#E6EEFF", ink: "#0C2A7A", key: "d.good" },
+};
+
+function DetailPanel({ d, tag }: { d: ShiftWindow["detail"]; tag: typeof TAG[keyof typeof TAG] }) {
+  const t = useT();
+  return (
+    <div style={{ padding: "14px 16px 16px", borderTop: `1px solid ${G.line2}`, background: `${tag.bg}40`, animation: "rk-fadeUp .25s both" }}>
+      {/* Where to be */}
+      <div style={{ display: "flex", gap: 10, alignItems: "flex-start", padding: "10px 12px", borderRadius: 12, background: G.green, marginBottom: 14 }}>
+        <Target size={15} color="#fff" style={{ flexShrink: 0, marginTop: 1 }} />
+        <div>
+          <div style={{ fontSize: 9.5, fontWeight: 800, letterSpacing: ".7px", textTransform: "uppercase", color: "rgba(255,255,255,.7)", marginBottom: 2 }}>{t("d.whereToBe")}</div>
+          <p style={{ margin: 0, fontSize: 13, lineHeight: 1.45, color: "#fff", fontWeight: 600 }}>{d.position}</p>
+        </div>
+      </div>
+
+      {/* Hotspots */}
+      <div style={{ fontSize: 9.5, fontWeight: 800, letterSpacing: ".7px", textTransform: "uppercase", color: G.faint, marginBottom: 8 }}>{t("d.bestSpots")}</div>
+      <div style={{ display: "flex", flexDirection: "column", gap: 7, marginBottom: 14 }}>
+        {d.hotspots.map((h, i) => {
+          const chip = HEAT_CHIP[h.heat];
+          return (
+            <div key={i} style={{ display: "flex", gap: 10, alignItems: "flex-start", padding: "9px 11px", borderRadius: 11, background: G.surface, border: `1px solid ${G.line}` }}>
+              <div style={{ width: 26, height: 26, borderRadius: 8, flexShrink: 0, background: G.green50, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                <MapPin size={14} color={G.green700} />
+              </div>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 13, fontWeight: 700, color: G.ink, lineHeight: 1.25 }}>{h.name}</div>
+                <div style={{ fontSize: 11.5, color: G.muted, marginTop: 2, lineHeight: 1.4 }}>{h.why}</div>
+              </div>
+              <span style={{ flexShrink: 0, padding: "2px 7px", borderRadius: 6, fontSize: 9.5, fontWeight: 800, letterSpacing: ".3px", textTransform: "uppercase", background: chip.bg, color: chip.ink }}>{t(chip.key)}</span>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Why now */}
+      <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 8 }}>
+        <Zap size={12} color={G.green700} />
+        <span style={{ fontSize: 9.5, fontWeight: 800, letterSpacing: ".7px", textTransform: "uppercase", color: G.faint }}>{t("d.whyGood")}</span>
+      </div>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 14 }}>
+        {d.drivers.map((s, i) => (
+          <span key={i} style={{ padding: "5px 10px", borderRadius: 8, background: G.surface, border: `1px solid ${G.line}`, fontSize: 11.5, fontWeight: 600, color: G.ink2 }}>{s}</span>
+        ))}
+      </div>
+
+      {/* Traffic */}
+      <div style={{ display: "flex", gap: 9, alignItems: "flex-start", marginBottom: 12 }}>
+        <Navigation size={14} color={G.muted} style={{ flexShrink: 0, marginTop: 2 }} />
+        <div>
+          <span style={{ fontSize: 11, fontWeight: 800, color: G.ink2 }}>{t("d.traffic")} · </span>
+          <span style={{ fontSize: 12, color: G.muted, lineHeight: 1.45 }}>{d.traffic}</span>
+        </div>
+      </div>
+
+      {/* Tip */}
+      <div style={{ display: "flex", gap: 9, alignItems: "flex-start", padding: "10px 12px", borderRadius: 11, background: "rgba(245,197,66,.14)", border: "1px solid rgba(201,110,0,.22)" }}>
+        <Lightbulb size={15} color={G.amber} style={{ flexShrink: 0, marginTop: 1 }} />
+        <p style={{ margin: 0, fontSize: 12, lineHeight: 1.45, color: G.amberInk, fontWeight: 600 }}>{d.tip}</p>
+      </div>
+    </div>
+  );
+}
+
+function WindowCard({ w, idx, isAvoid, active }: { w: ShiftWindow; idx: number; isAvoid: boolean; active?: boolean }) {
+  const [open, setOpen] = useState((idx === 0 || !!active) && !isAvoid);
   const tag = TAG[w.tag];
+  const t = useT();
 
   if (isAvoid) {
     return (
@@ -38,7 +119,8 @@ function WindowCard({ w, idx, isAvoid }: { w: ShiftWindow; idx: number; isAvoid:
         <div style={{ flex: 1 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 3 }}>
             <span style={{ fontWeight: 800, fontSize: 14, color: G.redInk, fontVariantNumeric: "tabular-nums" }}>{w.time}</span>
-            <span style={{ padding: "2px 8px", borderRadius: 6, fontSize: 10.5, fontWeight: 700, background: G.red, color: "#fff" }}>AVOID</span>
+            <span style={{ padding: "2px 8px", borderRadius: 6, fontSize: 10.5, fontWeight: 700, background: G.red, color: "#fff" }}>{t("shifts.avoidBadge")}</span>
+            {active && <span style={{ padding: "2px 8px", borderRadius: 6, fontSize: 10.5, fontWeight: 700, background: G.surface, color: G.redInk }}>{t("shifts.rightNow")}</span>}
           </div>
           <p style={{ margin: 0, fontSize: 12.5, lineHeight: 1.45, color: G.redInk }}>{w.reason}</p>
         </div>
@@ -68,31 +150,42 @@ function WindowCard({ w, idx, isAvoid }: { w: ShiftWindow; idx: number; isAvoid:
 
         <div style={{ flex: 1, minWidth: 0 }}>
           {/* Time — big and bold */}
-          <div style={{ fontWeight: 800, fontSize: 18, color: G.ink, fontVariantNumeric: "tabular-nums", letterSpacing: "-.4px", lineHeight: 1.1 }}>{w.time}</div>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+            <span style={{ fontWeight: 800, fontSize: 18, color: G.ink, fontVariantNumeric: "tabular-nums", letterSpacing: "-.4px", lineHeight: 1.1 }}>{w.time}</span>
+            {active && <NowBadge />}
+          </div>
           <div style={{ fontSize: 12, color: G.muted, marginTop: 3, fontWeight: 600 }}>{w.label}</div>
         </div>
 
         {/* Rate */}
         <div style={{ textAlign: "right", flexShrink: 0 }}>
           <div style={{ fontWeight: 800, fontSize: 20, color: G.green700, fontVariantNumeric: "tabular-nums", letterSpacing: "-.5px", lineHeight: 1 }}>₹{w.rphr}</div>
-          <div style={{ fontSize: 10, color: G.faint, fontWeight: 700, marginTop: 3, textTransform: "uppercase", letterSpacing: ".4px" }}>per hour</div>
+          <div style={{ fontSize: 10, color: G.faint, fontWeight: 700, marginTop: 3, textTransform: "uppercase", letterSpacing: ".4px" }}>{t("shifts.perHour")}</div>
         </div>
+
+        <ChevronDown size={18} color={G.faint} style={{ flexShrink: 0, transition: "transform .25s", transform: open ? "rotate(180deg)" : "none" }} />
       </button>
 
-      {/* Demand bar + tag */}
-      <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "0 16px 14px" }}>
+      {/* Demand bar + tag + tap hint */}
+      <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "0 16px 12px" }}>
         <div style={{ flex: 1, height: 5, borderRadius: 3, background: G.line2, overflow: "hidden" }}>
           <div style={{ width: `${w.demand * 100}%`, height: "100%", borderRadius: 3, background: tag.bar, transition: "width .8s cubic-bezier(.4,0,.2,1)" }} />
         </div>
         <span style={{ padding: "3px 9px", borderRadius: 7, fontSize: 10.5, fontWeight: 700, background: tag.bg, color: tag.ink, flexShrink: 0, letterSpacing: ".2px" }}>{w.tagText}</span>
       </div>
 
-      {open && (
-        <div style={{ display: "flex", gap: 10, padding: "12px 16px 14px", borderTop: `1px solid ${G.line2}`, background: `${tag.bg}50`, animation: "rk-fadeUp .25s both" }}>
-          <Info size={13} color={tag.ink} style={{ flexShrink: 0, marginTop: 2 }} />
-          <p style={{ margin: 0, fontSize: 12.5, lineHeight: 1.55, color: G.ink2 }}>{w.reason}</p>
-        </div>
+      {!open && (
+        <button
+          onClick={() => setOpen(true)}
+          style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 6, width: "100%", padding: "9px 16px", background: "none", border: "none", borderTop: `1px solid ${G.line2}`, cursor: "pointer" }}
+        >
+          <MapPin size={12} color={G.green700} />
+          <span style={{ fontSize: 11.5, fontWeight: 700, color: G.green700, letterSpacing: ".2px" }}>{t("shifts.whereWhy")}</span>
+          <ChevronDown size={13} color={G.green700} />
+        </button>
       )}
+
+      {open && <DetailPanel d={w.detail} tag={tag} />}
     </div>
   );
 }
@@ -107,15 +200,16 @@ function EarningsChart({ curve }: { curve: EarningsCurve }) {
     curve.weeks.map((w, i) => `${i ? "L" : "M"}${xs(i).toFixed(1)} ${ys(w[key]).toFixed(1)}`).join(" ");
   const area = `${line("proj")} L${xs(curve.weeks.length - 1)} ${H - PB} L${xs(0)} ${H - PB} Z`;
   const [mounted, setMounted] = useState(false);
-  useEffect(() => { const t = setTimeout(() => setMounted(true), 80); return () => clearTimeout(t); }, []);
+  useEffect(() => { const id = setTimeout(() => setMounted(true), 80); return () => clearTimeout(id); }, []);
   const uplift = Math.round(((curve.projected - curve.now) / curve.now) * 100);
+  const t = useT();
 
   return (
     <div style={{ background: G.surface, borderRadius: 18, padding: "16px 14px 10px", border: `1px solid ${G.line}`, boxShadow: "0 2px 8px -4px rgba(10,24,18,.1)" }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 12 }}>
         <div>
-          <div style={{ fontWeight: 800, fontSize: 14.5, color: G.ink }}>Earnings projection</div>
-          <div style={{ fontSize: 11.5, color: G.muted, marginTop: 2 }}>8 weeks with RideKamao</div>
+          <div style={{ fontWeight: 800, fontSize: 14.5, color: G.ink }}>{t("shifts.earningsProjection")}</div>
+          <div style={{ fontSize: 11.5, color: G.muted, marginTop: 2 }}>{t("shifts.eightWeeks")}</div>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 5, padding: "4px 8px", borderRadius: 8, background: G.green50 }}>
           <TrendingUp size={13} color={G.green700} />
@@ -124,12 +218,12 @@ function EarningsChart({ curve }: { curve: EarningsCurve }) {
       </div>
       <div style={{ display: "flex", alignItems: "flex-end", gap: 14, marginBottom: 10 }}>
         <div>
-          <div style={{ fontSize: 10, fontWeight: 700, color: G.faint, textTransform: "uppercase" }}>Now / week</div>
+          <div style={{ fontSize: 10, fontWeight: 700, color: G.faint, textTransform: "uppercase" }}>{t("shifts.nowWeek")}</div>
           <div style={{ fontWeight: 700, fontSize: 17, color: G.ink2, fontVariantNumeric: "tabular-nums" }}>₹{curve.now.toLocaleString("en-IN")}</div>
         </div>
         <div style={{ color: G.faint, fontSize: 16, marginBottom: 3 }}>→</div>
         <div>
-          <div style={{ fontSize: 10, fontWeight: 700, color: G.green700, textTransform: "uppercase" }}>Week 8</div>
+          <div style={{ fontSize: 10, fontWeight: 700, color: G.green700, textTransform: "uppercase" }}>{t("shifts.week8")}</div>
           <div style={{ fontWeight: 800, fontSize: 21, color: G.green700, letterSpacing: "-.4px", fontVariantNumeric: "tabular-nums" }}>₹{curve.projected.toLocaleString("en-IN")}</div>
         </div>
       </div>
@@ -157,6 +251,8 @@ function EarningsChart({ curve }: { curve: EarningsCurve }) {
 export default function ShiftsPage() {
   const router = useRouter();
   const { profile, loading } = useProfile();
+  const t = useT();
+  const lang = useLang();
   const [zone, setZone] = useState<Zone | null>(null);
   const [locationStatus, setLocationStatus] = useState<"idle" | "requesting" | "granted" | "denied">("idle");
 
@@ -183,13 +279,12 @@ export default function ShiftsPage() {
 
   if (loading || !profile) return null;
 
-  const profession = getProfession(profile.profession);
-  const allWindows = windowsFor(profile.profession, zone);
+  const now = new Date();
+  const allWindows = windowsFor(profile.profession, zone, now, lang);
   const avoidWindow = allWindows.find((w) => w.tag === "avoid");
   const rideWindows = allWindows.filter((w) => w.tag !== "avoid");
 
-  const now = new Date();
-  const dateStr = now.toLocaleDateString("en-IN", { weekday: "long", day: "numeric", month: "long" });
+  const dateStr = now.toLocaleDateString(localeTag(lang), { weekday: "long", day: "numeric", month: "long" });
 
   const hoursArr = [3, 3.5, 1.5, 2, 3, 3.5, 2.5];
   const todayTotal = Math.round(
@@ -205,17 +300,17 @@ export default function ShiftsPage() {
         <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 10 }}>
           <div>
             <h1 style={{ margin: 0, fontWeight: 800, fontSize: 26, letterSpacing: "-.6px", color: G.ink }}>
-              Shift Planner
+              {t("shifts.title")}
             </h1>
             <div style={{ marginTop: 4, fontSize: 13, color: G.muted }}>
-              {profession?.title} · {zone ? zone.label : "Delhi NCR"}
+              {profTitle(profile.profession, lang)} · {zone ? zone.label : t("common.ncr")}
             </div>
           </div>
           {/* Location indicator */}
           <div style={{ display: "flex", alignItems: "center", gap: 5, padding: "6px 10px", borderRadius: 10, background: locationStatus === "granted" ? G.green50 : G.surface, border: `1px solid ${locationStatus === "granted" ? G.green100 : G.line}`, flexShrink: 0, marginTop: 2 }}>
             <MapPin size={13} color={locationStatus === "granted" ? G.green : G.faint} />
             <span style={{ fontSize: 11, fontWeight: 700, color: locationStatus === "granted" ? G.green700 : G.faint }}>
-              {locationStatus === "requesting" ? "Locating…" : locationStatus === "granted" ? "Located" : "Delhi NCR"}
+              {locationStatus === "requesting" ? t("loc.locating") : locationStatus === "granted" ? t("loc.located") : t("loc.ncr")}
             </span>
           </div>
         </div>
@@ -226,22 +321,22 @@ export default function ShiftsPage() {
         <div style={{ borderRadius: 22, padding: "18px 20px", background: "linear-gradient(150deg,#0B6B48,#064D33 60%,#032D1E 100%)", boxShadow: "0 20px 48px -18px rgba(4,77,51,.55)", position: "relative", overflow: "hidden" }}>
           <div style={{ position: "absolute", top: -40, right: -30, width: 160, height: 160, borderRadius: "50%", background: "radial-gradient(circle, rgba(255,255,255,.14), transparent 65%)", pointerEvents: "none" }} />
           <div style={{ position: "relative" }}>
-            <div style={{ fontWeight: 700, fontSize: 12, letterSpacing: ".8px", textTransform: "uppercase", color: "rgba(255,255,255,.8)", marginBottom: 10 }}>Today's top 3 windows</div>
+            <div style={{ fontWeight: 700, fontSize: 12, letterSpacing: ".8px", textTransform: "uppercase", color: "rgba(255,255,255,.8)", marginBottom: 10 }}>{t("shifts.top3")}</div>
             <div style={{ display: "flex", alignItems: "flex-end", gap: 6, marginBottom: 14 }}>
               <span style={{ fontWeight: 800, fontSize: 40, letterSpacing: "-1.4px", color: "#fff", lineHeight: .9, fontVariantNumeric: "tabular-nums" }}>₹{todayTotal.toLocaleString("en-IN")}</span>
-              <span style={{ fontSize: 13, fontWeight: 600, color: "rgba(255,255,255,.75)", marginBottom: 4 }}>projected</span>
+              <span style={{ fontSize: 13, fontWeight: 600, color: "rgba(255,255,255,.75)", marginBottom: 4 }}>{t("shifts.projected")}</span>
             </div>
             <div style={{ display: "flex", gap: 20 }}>
               <div>
                 <div style={{ fontSize: 11, color: "rgba(255,255,255,.7)", fontWeight: 600, display: "flex", alignItems: "center", gap: 4 }}>
-                  <Clock size={11} /> Work window
+                  <Clock size={11} /> {t("shifts.workWindow")}
                 </div>
-                <div style={{ fontWeight: 800, fontSize: 16, color: "#fff", fontVariantNumeric: "tabular-nums" }}>8.5 hrs</div>
+                <div style={{ fontWeight: 800, fontSize: 16, color: "#fff", fontVariantNumeric: "tabular-nums" }}>8.5 {t("shifts.hrs")}</div>
               </div>
               <div style={{ width: 1, background: "rgba(255,255,255,.2)" }} />
               <div>
                 <div style={{ fontSize: 11, color: "rgba(255,255,255,.7)", fontWeight: 600, display: "flex", alignItems: "center", gap: 4 }}>
-                  <TrendingUp size={11} /> vs usual
+                  <TrendingUp size={11} /> {t("shifts.vsUsual")}
                 </div>
                 <div style={{ fontWeight: 800, fontSize: 16, color: "#fff" }}>+34%</div>
               </div>
@@ -250,12 +345,17 @@ export default function ShiftsPage() {
         </div>
       </div>
 
+      {/* Honest estimate disclaimer */}
+      <div style={{ margin: "7px 20px 0", fontSize: 11, color: G.faint, lineHeight: 1.4 }}>
+        * {t("common.estimated")}
+      </div>
+
       {/* Zone note */}
       {zone && (
         <div style={{ margin: "14px 20px 0", padding: "10px 14px", borderRadius: 12, background: G.green50, border: `1px solid ${G.green100}`, display: "flex", alignItems: "center", gap: 8 }}>
           <MapPin size={14} color={G.green700} />
           <span style={{ fontSize: 12.5, fontWeight: 600, color: G.green700 }}>
-            Showing surge data for <strong>{zone.label}</strong>
+            {t("shifts.showingSurge")} <strong>{zone.label}</strong>
           </span>
         </div>
       )}
@@ -263,17 +363,20 @@ export default function ShiftsPage() {
       {/* Windows */}
       <div style={{ padding: "18px 20px 0" }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
-          <span style={{ fontWeight: 700, fontSize: 12, letterSpacing: ".7px", textTransform: "uppercase", color: G.faint }}>All windows today</span>
-          <span style={{ fontSize: 11.5, fontWeight: 700, color: G.green700 }}>{rideWindows.length} ride · 1 avoid</span>
+          <span style={{ fontWeight: 700, fontSize: 12, letterSpacing: ".7px", textTransform: "uppercase", color: G.faint }}>{t("shifts.allWindows")}</span>
+          <span style={{ fontSize: 11.5, fontWeight: 700, color: G.green700 }}>{rideWindows.length} {t("shifts.ride")} · 1 {t("shifts.avoid")}</span>
         </div>
-        {rideWindows.map((w, i) => <WindowCard key={i} w={w} idx={i} isAvoid={false} />)}
-        {avoidWindow && <WindowCard w={avoidWindow} idx={0} isAvoid />}
+        {rideWindows.map((w, i) => <WindowCard key={i} w={w} idx={i} isAvoid={false} active={isWindowActive(w, now)} />)}
+        {avoidWindow && <WindowCard w={avoidWindow} idx={0} isAvoid active={isWindowActive(avoidWindow, now)} />}
       </div>
 
       {/* Earnings chart */}
       <div style={{ padding: "6px 20px 0" }}>
-        <div style={{ fontWeight: 700, fontSize: 12, letterSpacing: ".7px", textTransform: "uppercase", color: G.faint, marginBottom: 12 }}>Earnings outlook</div>
+        <div style={{ fontWeight: 700, fontSize: 12, letterSpacing: ".7px", textTransform: "uppercase", color: G.faint, marginBottom: 12 }}>{t("shifts.earningsOutlook")}</div>
         <EarningsChart curve={curve} />
+        <Link href="/earnings" style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 7, marginTop: 12, height: 48, borderRadius: 14, background: G.surface, border: `1.5px solid ${G.green}`, color: G.green700, fontWeight: 700, fontSize: 14, textDecoration: "none" }}>
+          <Wallet size={17} /> {t("earn.open")}
+        </Link>
       </div>
     </div>
   );

@@ -4,8 +4,9 @@ import { useEffect } from "react";
 import Link from "next/link";
 import { useProfile } from "@/lib/ridekamao-profile";
 import { useUI } from "@/lib/ui-context";
-import { PROFESSIONS } from "@/lib/ridekamao-data";
+import { useT, useLang, profTitle } from "@/lib/i18n";
 import { ArrowRight, Clock, Thermometer, Shield, MapPin, ChevronRight } from "lucide-react";
+import { SpreadActions } from "@/components/spread-actions";
 
 const G = {
   green: "#0A9060", greenDark: "#066B47", green700: "#045234",
@@ -18,32 +19,32 @@ const G = {
 const features = [
   {
     href: "/shifts",
-    label: "Shift Planner",
-    desc: "Best windows to ride today",
+    labelKey: "home.f.shift" as const,
+    descKey: "home.f.shiftDesc" as const,
     Icon: Clock,
     accent: G.green,
     accentBg: G.green50,
-    tag: "Live",
+    tagKey: "home.f.shiftTag" as const,
     tagColor: G.green,
   },
   {
     href: "/heat",
-    label: "Heat Safety",
-    desc: "AQI · fatigue hour · hydration points",
+    labelKey: "home.f.heat" as const,
+    descKey: "home.f.heatDesc" as const,
     Icon: Thermometer,
     accent: "#B85000",
     accentBg: "#FFE8D0",
-    tag: "HIGH today",
+    tagKey: "home.f.heatTag" as const,
     tagColor: "#B85000",
   },
   {
     href: "/rights",
-    label: "Know Your Rights",
-    desc: "Legal help in your language",
+    labelKey: "home.f.rights" as const,
+    descKey: "home.f.rightsDesc" as const,
     Icon: Shield,
     accent: "#1A4FCC",
     accentBg: "#E0EAFF",
-    tag: "5 topics",
+    tagKey: "home.f.rightsTag" as const,
     tagColor: "#1A4FCC",
   },
 ];
@@ -51,10 +52,11 @@ const features = [
 export default function HomePage() {
   const { profile, loading } = useProfile();
   const { openProfile } = useUI();
+  const t = useT();
+  const lang = useLang();
 
-  const profession = profile ? PROFESSIONS.find((p) => p.id === profile.profession) : null;
   const hour = new Date().getHours();
-  const timeGreeting = hour < 12 ? "Subah ka" : hour < 17 ? "Dopahar ka" : "Shaam ka";
+  const greetKey = hour < 12 ? "home.goodMorning" : hour < 17 ? "home.goodAfternoon" : "home.goodEvening";
 
   return (
     <div style={{ background: G.bg, minHeight: "100%", display: "flex", flexDirection: "column" }}>
@@ -110,7 +112,7 @@ export default function HomePage() {
           {!loading && profile ? (
             <>
               <div style={{ fontSize:13, color:"rgba(255,255,255,.55)", fontWeight:600, letterSpacing:".3px", marginBottom:4 }}>
-                {timeGreeting} shukriya,
+                {t(greetKey)}
               </div>
               <h1 style={{ margin:"0 0 6px", fontWeight:800, fontSize:34, letterSpacing:"-1.2px", color:"#fff", lineHeight:1.06 }}>
                 {profile.name}
@@ -118,7 +120,7 @@ export default function HomePage() {
               <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:22 }}>
                 <div style={{ padding:"4px 12px", borderRadius:100, background:"rgba(255,255,255,.12)", border:"1px solid rgba(255,255,255,.18)" }}>
                   <span style={{ color:"rgba(255,255,255,.85)", fontSize:12.5, fontWeight:600 }}>
-                    {profession?.title ?? "Rider"} · NCR
+                    {profTitle(profile.profession, lang)} · {t("common.ncr")}
                   </span>
                 </div>
               </div>
@@ -133,21 +135,21 @@ export default function HomePage() {
                   backdropFilter:"blur(8px)",
                 }}
               >
-                View today's plan
+                {t("home.viewPlan")}
                 <ArrowRight size={16} />
               </Link>
             </>
           ) : (
             <>
               <div style={{ fontSize:13, color:"rgba(255,255,255,.55)", fontWeight:600, letterSpacing:".4px", textTransform:"uppercase", marginBottom:10 }}>
-                Gig workers · Delhi NCR
+                {t("home.kicker")}
               </div>
               <h1 style={{ margin:"0 0 12px", fontWeight:800, fontSize:38, letterSpacing:"-1.4px", color:"#fff", lineHeight:1.02 }}>
-                Ride smart.<br/>
-                <span style={{ color:"#5DEBB0" }}>Earn more.</span>
+                {t("home.heroTitle1")}<br/>
+                <span style={{ color:"#5DEBB0" }}>{t("home.heroTitle2")}</span>
               </h1>
               <p style={{ margin:"0 0 24px", fontSize:14.5, color:"rgba(255,255,255,.7)", lineHeight:1.55, maxWidth:280 }}>
-                Smart shift plans — beat the heat, know your rights.
+                {t("home.heroSub")}
               </p>
               <Link
                 href="/onboarding"
@@ -159,7 +161,7 @@ export default function HomePage() {
                   boxShadow:"0 4px 20px rgba(0,0,0,.18)",
                 }}
               >
-                Get personalised plans
+                {t("home.cta")}
                 <ArrowRight size={17} />
               </Link>
             </>
@@ -177,11 +179,11 @@ export default function HomePage() {
       <div style={{ padding:"24px 18px 0", flex:1 }}>
         <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:14 }}>
           <span style={{ fontSize:11, fontWeight:800, letterSpacing:"1px", textTransform:"uppercase", color:G.faint }}>
-            Features
+            {t("home.features")}
           </span>
           <div style={{ display:"flex", alignItems:"center", gap:5 }}>
             <MapPin size={11} color={G.faint} />
-            <span style={{ fontSize:11, fontWeight:600, color:G.faint }}>Delhi NCR</span>
+            <span style={{ fontSize:11, fontWeight:600, color:G.faint }}>{t("common.ncr")}</span>
           </div>
         </div>
 
@@ -211,13 +213,13 @@ export default function HomePage() {
               </div>
               <div style={{ flex:1, minWidth:0 }}>
                 <div style={{ fontWeight:800, fontSize:16, color:G.ink, letterSpacing:"-.2px" }}>
-                  {f.label}
+                  {t(f.labelKey)}
                 </div>
-                <div style={{ fontSize:12.5, color:G.muted, marginTop:2 }}>{f.desc}</div>
+                <div style={{ fontSize:12.5, color:G.muted, marginTop:2 }}>{t(f.descKey)}</div>
               </div>
               <div style={{ display:"flex", flexDirection:"column", alignItems:"flex-end", gap:6, flexShrink:0 }}>
                 <span style={{ fontSize:10, fontWeight:700, color:f.tagColor, background:f.accentBg, padding:"2px 8px", borderRadius:6, letterSpacing:".3px", textTransform:"uppercase" }}>
-                  {f.tag}
+                  {t(f.tagKey)}
                 </span>
                 <ChevronRight size={15} color={G.faint} />
               </div>
@@ -229,10 +231,13 @@ export default function HomePage() {
         <div style={{ marginTop:16, padding:"12px 16px", borderRadius:14, background:"rgba(10,144,96,.07)", border:"1px solid rgba(10,144,96,.15)", display:"flex", alignItems:"center", gap:10 }}>
           <div style={{ width:6, height:6, borderRadius:"50%", background:G.green, flexShrink:0, animation:"rk-pulse 2s infinite" }} />
           <p style={{ margin:0, fontSize:12.5, color:G.muted, lineHeight:1.5 }}>
-            Updated with live surge data · IPL season · Delhi NCR
+            {t("home.tip")}
           </p>
         </div>
       </div>
+
+      {/* Share + install */}
+      <SpreadActions />
 
       <div style={{ height:16 }} />
     </div>

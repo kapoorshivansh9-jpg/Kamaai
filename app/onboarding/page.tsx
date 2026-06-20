@@ -1,13 +1,26 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import { ArrowRight, Check, ChevronLeft } from "lucide-react";
 import { useProfile } from "@/lib/ridekamao-profile";
 import { LANGUAGES, PROFESSIONS, GOALS } from "@/lib/ridekamao-data";
 import { saveProfile } from "@/lib/supabase-events";
+import { tr, profTitle, profSub, goalTitle, goalSub } from "@/lib/i18n";
+import { useGoogleAuth } from "@/lib/auth";
 import type { RideKamaoProfile } from "@/lib/ridekamao-data";
+
+function GoogleIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 48 48" aria-hidden="true">
+      <path fill="#4285F4" d="M45.12 24.5c0-1.56-.14-3.06-.4-4.5H24v8.51h11.84c-.51 2.75-2.06 5.08-4.39 6.64v5.52h7.11c4.16-3.83 6.56-9.47 6.56-16.17z"/>
+      <path fill="#34A853" d="M24 46c5.94 0 10.92-1.97 14.56-5.33l-7.11-5.52c-1.97 1.32-4.49 2.1-7.45 2.1-5.73 0-10.58-3.87-12.31-9.07H4.34v5.7C7.96 41.07 15.4 46 24 46z"/>
+      <path fill="#FBBC05" d="M11.69 28.18c-.44-1.32-.69-2.73-.69-4.18s.25-2.86.69-4.18v-5.7H4.34A21.99 21.99 0 0 0 2 24c0 3.55.85 6.91 2.34 9.88l7.35-5.7z"/>
+      <path fill="#EA4335" d="M24 10.75c3.23 0 6.13 1.11 8.41 3.29l6.31-6.31C34.91 4.18 29.93 2 24 2 15.4 2 7.96 6.93 4.34 14.12l7.35 5.7c1.73-5.2 6.58-9.07 12.31-9.07z"/>
+    </svg>
+  );
+}
 
 const G = {
   green: "#0C9267", green700: "#056B4A", green600: "#0A8460",
@@ -64,8 +77,8 @@ function FieldInput({ label, placeholder, value, onChange, type = "text" }: {
   );
 }
 
-function GeneratingScreen({ onDone }: { onDone: () => void }) {
-  const items = ["Reading today's Delhi NCR weather & AQI", "Scanning local events — IPL, festivals", "Matching surge history to your zone", "Building your personalised shift plan"];
+function GeneratingScreen({ onDone, lang }: { onDone: () => void; lang: string }) {
+  const items = [tr(lang, "ob.gen1"), tr(lang, "ob.gen2"), tr(lang, "ob.gen3"), tr(lang, "ob.gen4")];
   const [done, setDone] = useState(0);
   useEffect(() => {
     if (done < items.length) {
@@ -81,8 +94,8 @@ function GeneratingScreen({ onDone }: { onDone: () => void }) {
         <ArrowRight size={34} color="#fff" strokeWidth={2.5} />
         <div style={{ position: "absolute", inset: -6, borderRadius: 28, border: `2px solid ${G.green}`, opacity: .3, animation: "rk-pulse 1.4s infinite" }} />
       </div>
-      <h2 style={{ margin: "0 0 4px", fontWeight: 800, fontSize: 22, letterSpacing: "-.4px", color: G.ink }}>Building your plan…</h2>
-      <p style={{ margin: "0 0 28px", fontSize: 13.5, color: G.muted }}>Just a few seconds</p>
+      <h2 style={{ margin: "0 0 4px", fontWeight: 800, fontSize: 22, letterSpacing: "-.4px", color: G.ink }}>{tr(lang, "ob.building")}</h2>
+      <p style={{ margin: "0 0 28px", fontSize: 13.5, color: G.muted }}>{tr(lang, "ob.fewSeconds")}</p>
       <div style={{ width: "100%", maxWidth: 320 }}>
         {items.map((item, i) => {
           const fin = i < done, cur = i === done;
@@ -111,10 +124,50 @@ export default function OnboardingPage() {
   const [email, setEmail] = useState("");
   const [target, setTarget] = useState(10000);
   const [generating, setGenerating] = useState(false);
+  const auth = useGoogleAuth();
 
+  // Restore once: an existing profile (editing) wins; otherwise an in-progress
+  // draft saved before a Google sign-in redirect, so nothing is lost.
+  const restored = useRef(false);
   useEffect(() => {
-    if (profile) { setLang(profile.language); setProf(profile.profession); setGoals(profile.goals); setName(profile.name); setEmail(profile.email); setTarget(profile.weeklyTarget); }
-  }, []);
+    if (restored.current) return;
+    if (profile) {
+      restored.current = true;
+      setLang(profile.language); setProf(profile.profession); setGoals(profile.goals);
+      setName(profile.name); setEmail(profile.email); setTarget(profile.weeklyTarget);
+      return;
+    }
+    try {
+      const raw = localStorage.getItem("rk-onboarding-draft");
+      if (raw) {
+        const d = JSON.parse(raw);
+        restored.current = true;
+        if (d.lang) setLang(d.lang);
+        if (d.prof) setProf(d.prof);
+        if (Array.isArray(d.goals)) setGoals(d.goals);
+        if (d.name) setName(d.name);
+        if (d.email) setEmail(d.email);
+        if (typeof d.target === "number") setTarget(d.target);
+        if (typeof d.step === "number") setStep(d.step);
+      }
+    } catch { /* ignore */ }
+  }, [profile]);
+
+  // Persist the in-progress draft so a Google sign-in redirect keeps progress.
+  useEffect(() => {
+    if (profile) return;
+    try {
+      localStorage.setItem("rk-onboarding-draft", JSON.stringify({ lang, prof, goals, name, email, target, step }));
+    } catch { /* ignore */ }
+  }, [lang, prof, goals, name, email, target, step, profile]);
+
+  // When signed in with Google, fill name + email from the account.
+  useEffect(() => {
+    if (auth.user) {
+      setEmail((e) => e || auth.user!.email);
+      setName((n) => n || auth.user!.name);
+    }
+  }, [auth.user]);
 
   const toggleGoal = (id: string) => setGoals((g) => g.includes(id) ? g.filter((x) => x !== id) : [...g, id]);
 
@@ -122,10 +175,11 @@ export default function OnboardingPage() {
     const p: RideKamaoProfile = { language: lang, profession: prof!, goals, name: name.trim() || "Saathi", email, weeklyTarget: target };
     setProfile(p);
     saveProfile(p);
+    try { localStorage.removeItem("rk-onboarding-draft"); } catch { /* ignore */ }
     router.push("/shifts");
   };
 
-  if (generating) return <GeneratingScreen onDone={handleFinish} />;
+  if (generating) return <GeneratingScreen onDone={handleFinish} lang={lang} />;
 
   const pageWrap: React.CSSProperties = { minHeight: "100dvh", background: G.bg };
 
@@ -141,15 +195,15 @@ export default function OnboardingPage() {
                 <p style={{ margin: "0 0 22px", fontWeight: 800, fontSize: 24, color: "#fff", letterSpacing: "-.5px" }}>
                   Ride<span style={{ color: "#9BF0CE" }}>Kamao</span>
                 </p>
-                <h1 style={{ margin: "0 0 8px", fontWeight: 800, fontSize: 28, lineHeight: 1.1, letterSpacing: "-.8px", color: "#fff" }}>
-                  Ride smart,<br />earn more.
+                <h1 style={{ margin: "0 0 8px", fontWeight: 800, fontSize: 28, lineHeight: 1.1, letterSpacing: "-.8px", color: "#fff", whiteSpace: "pre-line" }}>
+                  {tr(lang, "ob.heroTitle")}
                 </h1>
                 <p style={{ margin: 0, fontSize: 14, color: "rgba(255,255,255,.82)", fontFamily: "'Noto Sans Devanagari', sans-serif" }}>
-                  राइड करो · कमाओ · आगे बढ़ो
+                  {tr(lang, "ob.tagline")}
                 </p>
               </div>
 
-              <p style={{ fontWeight: 700, fontSize: 11.5, letterSpacing: ".9px", textTransform: "uppercase", color: G.faint, marginBottom: 12 }}>Choose your language · भाषा</p>
+              <p style={{ fontWeight: 700, fontSize: 11.5, letterSpacing: ".9px", textTransform: "uppercase", color: G.faint, marginBottom: 12 }}>{tr(lang, "ob.chooseLang")}</p>
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 28 }}>
                 {LANGUAGES.map((l) => {
                   const on = lang === l.id;
@@ -161,7 +215,7 @@ export default function OnboardingPage() {
                   );
                 })}
               </div>
-              <PrimaryBtn onClick={() => setStep(1)}>Get started <ArrowRight size={18} /></PrimaryBtn>
+              <PrimaryBtn onClick={() => setStep(1)}>{tr(lang, "ob.getStarted")} <ArrowRight size={18} /></PrimaryBtn>
             </div>
           </motion.div>
         )}
@@ -181,40 +235,61 @@ export default function OnboardingPage() {
             <div style={{ padding: "4px 20px 28px" }}>
               {step === 1 && (
                 <>
-                  <p style={{ fontWeight: 700, fontSize: 11.5, letterSpacing: "1px", textTransform: "uppercase", color: G.green, marginBottom: 6 }}>Step 1</p>
-                  <h1 style={{ margin: "0 0 6px", fontWeight: 800, fontSize: 24, letterSpacing: "-.5px", color: G.ink }}>What do you ride?</h1>
-                  <p style={{ margin: "0 0 20px", fontSize: 14, lineHeight: 1.5, color: G.muted }}>We tune every recommendation to how you earn.</p>
+                  <p style={{ fontWeight: 700, fontSize: 11.5, letterSpacing: "1px", textTransform: "uppercase", color: G.green, marginBottom: 6 }}>{tr(lang, "ob.step")} 1</p>
+                  <h1 style={{ margin: "0 0 6px", fontWeight: 800, fontSize: 24, letterSpacing: "-.5px", color: G.ink }}>{tr(lang, "ob.s1.title")}</h1>
+                  <p style={{ margin: "0 0 20px", fontSize: 14, lineHeight: 1.5, color: G.muted }}>{tr(lang, "ob.s1.sub")}</p>
                   {PROFESSIONS.map((p) => (
-                    <SelectCard key={p.id} title={p.title} sub={p.sub} selected={prof === p.id} onClick={() => setProf(p.id)} />
+                    <SelectCard key={p.id} title={profTitle(p.id, lang)} sub={profSub(p.id, lang)} selected={prof === p.id} onClick={() => setProf(p.id)} />
                   ))}
-                  <PrimaryBtn onClick={() => setStep(2)} disabled={!prof}>Continue <ArrowRight size={18} /></PrimaryBtn>
+                  <PrimaryBtn onClick={() => setStep(2)} disabled={!prof}>{tr(lang, "ob.continue")} <ArrowRight size={18} /></PrimaryBtn>
                 </>
               )}
 
               {step === 2 && (
                 <>
-                  <p style={{ fontWeight: 700, fontSize: 11.5, letterSpacing: "1px", textTransform: "uppercase", color: G.green, marginBottom: 6 }}>Step 2</p>
-                  <h1 style={{ margin: "0 0 6px", fontWeight: 800, fontSize: 24, letterSpacing: "-.5px", color: G.ink }}>What matters most?</h1>
-                  <p style={{ margin: "0 0 20px", fontSize: 14, lineHeight: 1.5, color: G.muted }}>Pick any that fit — your plan is built around these.</p>
+                  <p style={{ fontWeight: 700, fontSize: 11.5, letterSpacing: "1px", textTransform: "uppercase", color: G.green, marginBottom: 6 }}>{tr(lang, "ob.step")} 2</p>
+                  <h1 style={{ margin: "0 0 6px", fontWeight: 800, fontSize: 24, letterSpacing: "-.5px", color: G.ink }}>{tr(lang, "ob.s2.title")}</h1>
+                  <p style={{ margin: "0 0 20px", fontSize: 14, lineHeight: 1.5, color: G.muted }}>{tr(lang, "ob.s2.sub")}</p>
                   {GOALS.map((g) => (
-                    <SelectCard key={g.id} title={g.title} sub={g.sub} multi selected={goals.includes(g.id)} onClick={() => toggleGoal(g.id)} />
+                    <SelectCard key={g.id} title={goalTitle(g.id, lang)} sub={goalSub(g.id, lang)} multi selected={goals.includes(g.id)} onClick={() => toggleGoal(g.id)} />
                   ))}
-                  <PrimaryBtn onClick={() => setStep(3)} disabled={goals.length === 0}>Continue <ArrowRight size={18} /></PrimaryBtn>
+                  <PrimaryBtn onClick={() => setStep(3)} disabled={goals.length === 0}>{tr(lang, "ob.continue")} <ArrowRight size={18} /></PrimaryBtn>
                 </>
               )}
 
               {step === 3 && (
                 <>
-                  <p style={{ fontWeight: 700, fontSize: 11.5, letterSpacing: "1px", textTransform: "uppercase", color: G.green, marginBottom: 6 }}>Step 3</p>
-                  <h1 style={{ margin: "0 0 6px", fontWeight: 800, fontSize: 24, letterSpacing: "-.5px", color: G.ink }}>Your details</h1>
-                  <p style={{ margin: "0 0 20px", fontSize: 14, lineHeight: 1.5, color: G.muted }}>Your daily plan and earnings report — straight to your inbox each morning.</p>
-                  <FieldInput label="Your name" placeholder="e.g. Ramesh Kumar" value={name} onChange={setName} />
-                  <FieldInput label="Email" placeholder="you@email.com" value={email} onChange={setEmail} type="email" />
+                  <p style={{ fontWeight: 700, fontSize: 11.5, letterSpacing: "1px", textTransform: "uppercase", color: G.green, marginBottom: 6 }}>{tr(lang, "ob.step")} 3</p>
+                  <h1 style={{ margin: "0 0 6px", fontWeight: 800, fontSize: 24, letterSpacing: "-.5px", color: G.ink }}>{tr(lang, "ob.s3.title")}</h1>
+                  <p style={{ margin: "0 0 20px", fontSize: 14, lineHeight: 1.5, color: G.muted }}>{tr(lang, "ob.s3.sub")}</p>
+
+                  {/* Sign up with Google (optional) */}
+                  {auth.configured && (
+                    <div style={{ marginBottom: 18 }}>
+                      {auth.user ? (
+                        <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "11px 14px", borderRadius: 14, background: G.green50, border: `1.5px solid ${G.green100}` }}>
+                          <Check size={16} color={G.green700} />
+                          <span style={{ fontSize: 12.5, fontWeight: 600, color: G.green700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{tr(lang, "ob.usingGoogle")} · {auth.user.email}</span>
+                        </div>
+                      ) : (
+                        <>
+                          <button onClick={() => auth.signIn("/onboarding")} style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 9, width: "100%", height: 50, borderRadius: 14, background: "#fff", border: `1.5px solid ${G.line}`, cursor: "pointer", fontWeight: 700, fontSize: 15, color: G.ink }}>
+                            <GoogleIcon /> {tr(lang, "ob.useGoogle")}
+                          </button>
+                          <div style={{ textAlign: "center", fontSize: 12, color: G.faint, margin: "12px 0 2px" }}>{tr(lang, "ob.orType")}</div>
+                        </>
+                      )}
+                      {auth.error && <p style={{ margin: "8px 2px 0", fontSize: 11.5, color: "#B83030", lineHeight: 1.4 }}>{auth.error}</p>}
+                    </div>
+                  )}
+
+                  <FieldInput label={tr(lang, "ob.name")} placeholder={tr(lang, "ob.namePh")} value={name} onChange={setName} />
+                  <FieldInput label={tr(lang, "ob.email")} placeholder={tr(lang, "ob.emailPh")} value={email} onChange={setEmail} type="email" />
 
                   {goals.includes("target") && (
                     <div style={{ marginBottom: 20, padding: "16px", background: G.surface, borderRadius: 16, border: `2px solid ${G.green}`, boxShadow: "0 1px 3px rgba(10,24,18,.06)" }}>
                       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
-                        <span style={{ fontWeight: 700, fontSize: 13, color: G.ink2 }}>Weekly income target</span>
+                        <span style={{ fontWeight: 700, fontSize: 13, color: G.ink2 }}>{tr(lang, "ob.weeklyTarget")}</span>
                         <span style={{ fontWeight: 800, fontSize: 22, color: G.green700, letterSpacing: "-.5px", fontVariantNumeric: "tabular-nums" }}>₹{target.toLocaleString("en-IN")}</span>
                       </div>
                       <input type="range" min={4000} max={25000} step={500} value={target} onChange={(e) => setTarget(+e.target.value)} style={{ width: "100%", accentColor: G.green, height: 5 }} />
@@ -225,7 +300,7 @@ export default function OnboardingPage() {
                   )}
 
                   <PrimaryBtn onClick={() => setGenerating(true)} disabled={!/.+@.+\..+/.test(email)}>
-                    Build my plan <ArrowRight size={18} />
+                    {tr(lang, "ob.buildPlan")} <ArrowRight size={18} />
                   </PrimaryBtn>
                 </>
               )}

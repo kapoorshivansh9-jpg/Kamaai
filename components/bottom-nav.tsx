@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { User } from "lucide-react";
 import { useUI } from "@/lib/ui-context";
+import { useT } from "@/lib/i18n";
 
 function HomeIcon({ active }: { active: boolean }) {
   return (
@@ -40,6 +41,15 @@ function HeatIcon({ active }: { active: boolean }) {
     </svg>
   );
 }
+function EarnIcon({ active }: { active: boolean }) {
+  return (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none"
+      stroke="currentColor" strokeWidth={active ? 2.4 : 1.9} strokeLinecap="round" strokeLinejoin="round">
+      <path d="M19 7.5V6.5A1.5 1.5 0 0 0 17.5 5H5.5A2.5 2.5 0 0 0 3 7.5v9A2.5 2.5 0 0 0 5.5 19h12a1.5 1.5 0 0 0 1.5-1.5v-1"/>
+      <path d="M16 11.5h4v3h-4a1.5 1.5 0 0 1 0-3z"/>
+    </svg>
+  );
+}
 function RightsIcon({ active }: { active: boolean }) {
   return (
     <svg width="20" height="20" viewBox="0 0 24 24" fill="none"
@@ -50,15 +60,17 @@ function RightsIcon({ active }: { active: boolean }) {
 }
 
 const tabs = [
-  { href: "/",       label: "Home",   Icon: HomeIcon   },
-  { href: "/shifts", label: "Shifts", Icon: ShiftIcon  },
-  { href: "/heat",   label: "Heat",   Icon: HeatIcon   },
-  { href: "/rights", label: "Rights", Icon: RightsIcon },
+  { href: "/",       key: "nav.home"   as const, Icon: HomeIcon   },
+  { href: "/shifts", key: "nav.shifts" as const, Icon: ShiftIcon  },
+  { href: "/earnings", key: "nav.earn" as const, Icon: EarnIcon   },
+  { href: "/heat",   key: "nav.heat"   as const, Icon: HeatIcon   },
+  { href: "/rights", key: "nav.rights" as const, Icon: RightsIcon },
 ];
 
 export function BottomNav() {
   const pathname = usePathname();
   const { openProfile } = useUI();
+  const t = useT();
 
   if (pathname === "/onboarding") return null;
 
@@ -81,11 +93,11 @@ export function BottomNav() {
         boxShadow: "0 2px 8px rgba(5,22,14,.08), 0 20px 48px -8px rgba(5,22,14,.22), inset 0 1px 0 rgba(255,255,255,.9)",
         border: "1px solid rgba(189,216,200,.6)",
         padding: "5px 6px",
-        gap: 2,
+        gap: 1,
         width: "100%",
-        maxWidth: 380,
+        maxWidth: 430,
       }}>
-        {tabs.map(({ href, label, Icon }) => {
+        {tabs.map(({ href, key, Icon }) => {
           const active = pathname === href || (href !== "/" && pathname.startsWith(href));
           return (
             <Link
@@ -109,7 +121,7 @@ export function BottomNav() {
             >
               <Icon active={active} />
               <span style={{ fontSize: 10, fontWeight: active ? 700 : 600, letterSpacing: ".3px", lineHeight: 1 }}>
-                {label}
+                {t(key)}
               </span>
             </Link>
           );
@@ -132,7 +144,7 @@ export function BottomNav() {
           }}
         >
           <User size={20} strokeWidth={1.9} />
-          <span style={{ fontSize: 10, fontWeight: 600, letterSpacing: ".3px", lineHeight: 1 }}>Profile</span>
+          <span style={{ fontSize: 10, fontWeight: 600, letterSpacing: ".3px", lineHeight: 1 }}>{t("nav.profile")}</span>
         </button>
       </div>
     </div>

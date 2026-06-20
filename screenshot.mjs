@@ -15,10 +15,14 @@ const next = nums.length ? Math.max(...nums) + 1 : 1;
 const filename = label ? `screenshot-${next}-${label}.png` : `screenshot-${next}.png`;
 const outPath = join(dir, filename);
 
-const executablePath = join(
+// Bundled puppeteer Chrome is often missing on this machine; fall back to the
+// system Google Chrome install so screenshots keep working.
+const bundled = join(
   process.env.HOME,
   '.cache/puppeteer/chrome-headless-shell/mac_arm-149.0.7827.22/chrome-headless-shell-mac-arm64/chrome-headless-shell'
 );
+const systemChrome = '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
+const executablePath = existsSync(bundled) ? bundled : systemChrome;
 
 const browser = await puppeteer.launch({
   executablePath,

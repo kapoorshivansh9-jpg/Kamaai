@@ -1,5 +1,6 @@
--- RideKamao Supabase schema
+-- RideKamao Supabase schema (v2 — security hardened)
 -- Run this in your Supabase SQL editor at supabase.com → your project → SQL editor
+-- Safe to re-run on an existing project: it drops the old insecure policies first.
 
 -- User profiles (one per rider)
 CREATE TABLE IF NOT EXISTS profiles (
@@ -30,16 +31,28 @@ CREATE TABLE IF NOT EXISTS events (
 ALTER TABLE profiles ENABLE ROW LEVEL SECURITY;
 ALTER TABLE events   ENABLE ROW LEVEL SECURITY;
 
--- Allow anonymous inserts (app uses anon key)
-CREATE POLICY "allow_insert_profiles" ON profiles FOR INSERT WITH CHECK (true);
-CREATE POLICY "allow_upsert_profiles" ON profiles FOR UPDATE USING (true);
-CREATE POLICY "allow_insert_events"   ON events   FOR INSERT WITH CHECK (true);
+-- ── SECURITY FIX ──────────────────────────────────────────────
+-- The old policies let ANYONE with the public anon key read every
+-- rider's email/name and overwrite any profile. Remove them:
+DROP POLICY IF EXISTS "allow_select_profiles" ON profiles;
+DROP POLICY IF EXISTS "allow_select_events"   ON events;
+DROP POLICY IF EXISTS "allow_insert_profiles" ON profiles;
+DROP POLICY IF EXISTS "allow_upsert_profiles" ON profiles;
+DROP POLICY IF EXISTS "allow_insert_events"   ON events;
 
--- View all data (for your dashboard)
-CREATE POLICY "allow_select_profiles" ON profiles FOR SELECT USING (true);
-CREATE POLICY "allow_select_events"   ON events   FOR SELECT USING (true);
+-- The app (anon key) may only WRITE — it can never read data back.
+-- Your dashboard/SQL editor uses the service role, which bypasses RLS,
+-- so the views below still work for you.
+CREATE POLICY "anon_insert_profiles" ON profiles FOR INSERT WITH CHECK (true);
+CREATE POLICY "anon_insert_events"   ON events   FOR INSERT WITH CHECK (true);
 
--- Useful views for the dashboard
+-- Needed so the app's upsert can update a rider's own row on conflict.
+-- Note: rows can only be targeted by exact email; nothing is readable.
+CREATE POLICY "anon_update_profiles" ON profiles FOR UPDATE
+  USING (true) WITH CHECK (true);
+
+-- Useful views for the dashboard (query these from the Supabase
+-- dashboard / SQL editor — they are NOT exposed to the public app)
 CREATE OR REPLACE VIEW profession_breakdown AS
   SELECT profession, COUNT(*) as riders
   FROM profiles
@@ -55,3 +68,8 @@ CREATE OR REPLACE VIEW feature_usage AS
   SELECT event_type, COUNT(*) as count
   FROM events
   GROUP BY event_type ORDER BY count DESC;
+
+-- Keep the views private (service role only)
+REVOKE ALL ON profession_breakdown   FROM anon, authenticated;
+REVOKE ALL ON daily_active_sessions  FROM anon, authenticated;
+REVOKE ALL ON feature_usage          FROM anon, authenticated;

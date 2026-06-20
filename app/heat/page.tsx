@@ -1,8 +1,12 @@
 "use client";
 
-import { Thermometer, Wind, Droplets, Flame, MapPin, AlertTriangle, Info } from "lucide-react";
-import { HEAT } from "@/lib/ridekamao-data";
-import type { HeatMetric, SattuPoint } from "@/lib/ridekamao-data";
+import { useState, useEffect } from "react";
+import { Thermometer, Wind, Droplets, Flame, MapPin, AlertTriangle, Info, Navigation, Phone } from "lucide-react";
+import { getHeat } from "@/lib/ridekamao-data";
+import { useT, useLang, localeTag } from "@/lib/i18n";
+import { fetchNearbyWaterPoints, addWaterPoint } from "@/lib/supabase-events";
+import { supabaseConfigured } from "@/lib/supabase-browser";
+import type { HeatMetric, SattuPoint, HeatData } from "@/lib/ridekamao-data";
 
 const G = {
   ink: "#05160E", ink2: "#163022", muted: "#456055", faint: "#7A9A8A",
@@ -28,6 +32,24 @@ const METRIC_ICONS = {
   uv:   Flame,
 };
 
+// ── Live conditions (from /api/conditions) ────────────────────
+type Tone = "safe" | "mod" | "high" | "ext";
+interface Live { live: true; tempC: number | null; feelsLikeC: number; humidity: number | null; aqi: number | null; uv: number | null; level: Tone; }
+
+const TONE_KEY: Record<Tone, "heat.safe" | "heat.caution" | "heat.high" | "heat.extreme"> = {
+  safe: "heat.safe", mod: "heat.caution", high: "heat.high", ext: "heat.extreme",
+};
+const HERO_BG: Record<Tone, string> = {
+  safe: "linear-gradient(155deg,#0B6B48,#064D33 90%)",
+  mod:  "linear-gradient(155deg,#C98A00,#9A6A00 90%)",
+  high: "linear-gradient(155deg,#D45C00,#B03A00 90%)",
+  ext:  "linear-gradient(155deg,#C0322C,#8A1F1B 90%)",
+};
+// India CPCB AQI bands: 0–100 ok, 101–200 moderate, 201–300 poor, 301+ very poor/severe.
+const aqiTone = (a: number): Tone => (a >= 301 ? "ext" : a >= 201 ? "high" : a >= 101 ? "mod" : "safe");
+const tempTone = (c: number): Tone => (c >= 43 ? "ext" : c >= 40 ? "high" : c >= 35 ? "mod" : "safe");
+const uvTone = (u: number): Tone => (u >= 11 ? "ext" : u >= 8 ? "high" : u >= 6 ? "mod" : "safe");
+
 function MetricTile({ m }: { m: HeatMetric }) {
   const t = TONE[m.tone];
   const Icon = METRIC_ICONS[m.id as keyof typeof METRIC_ICONS] ?? Info;
@@ -45,8 +67,8 @@ function MetricTile({ m }: { m: HeatMetric }) {
   );
 }
 
-function FatigueTimeline() {
-  const d = HEAT;
+function FatigueTimeline({ d }: { d: HeatData }) {
+  const t = useT();
   const idx2p = d.hours.findIndex((h) => h.h === "2p");
   const markerPct = ((idx2p + 0.5) / d.hours.length) * 100;
   return (
@@ -56,8 +78,8 @@ function FatigueTimeline() {
           <Flame size={18} color={G.red} />
         </div>
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontWeight: 800, fontSize: 14.5, color: G.ink }}>Projected fatigue hour</div>
-          <div style={{ fontSize: 12, color: G.muted, marginTop: 1 }}>When heat strain peaks for your body</div>
+          <div style={{ fontWeight: 800, fontSize: 14.5, color: G.ink }}>{t("heat.fatigue")}</div>
+          <div style={{ fontSize: 12, color: G.muted, marginTop: 1 }}>{t("heat.fatigueSub")}</div>
         </div>
         <span style={{ fontWeight: 800, fontSize: 17, color: G.red, fontVariantNumeric: "tabular-nums", flexShrink: 0 }}>{d.fatigueHour}</span>
       </div>
@@ -80,10 +102,10 @@ function FatigueTimeline() {
       </div>
 
       <div style={{ display: "flex", gap: 14, marginTop: 11, paddingTop: 11, borderTop: `1px solid ${G.line2}` }}>
-        {[["Safe", RISK_COLORS[0]], ["Caution", RISK_COLORS[1]], ["High", RISK_COLORS[2]], ["Extreme", RISK_COLORS[3]]].map(([l, c]) => (
-          <div key={l} style={{ display: "flex", alignItems: "center", gap: 5 }}>
+        {([["heat.safe", RISK_COLORS[0]], ["heat.caution", RISK_COLORS[1]], ["heat.high", RISK_COLORS[2]], ["heat.extreme", RISK_COLORS[3]]] as const).map(([k, c]) => (
+          <div key={k} style={{ display: "flex", alignItems: "center", gap: 5 }}>
             <span style={{ width: 9, height: 9, borderRadius: 3, background: c, display: "inline-block" }} />
-            <span style={{ fontSize: 10.5, color: G.muted, fontWeight: 600 }}>{l}</span>
+            <span style={{ fontSize: 10.5, color: G.muted, fontWeight: 600 }}>{t(k)}</span>
           </div>
         ))}
       </div>
@@ -91,57 +113,211 @@ function FatigueTimeline() {
   );
 }
 
-function SattuSection({ points }: { points: SattuPoint[] }) {
+// Pin positions on the stylised map (one per amenity).
+const PIN_POS: [string, string][] = [["28%", "46%"], ["58%", "30%"], ["73%", "64%"]];
+
+// Rider amenity categories — emoji glyphs are language-neutral & friendly for low-literacy users.
+const AMEN_CATS = ["water", "toilet", "food", "rest", "ev", "parking"] as const;
+const CAT_EMOJI: Record<string, string> = { water: "💧", toilet: "🚻", food: "🍲", rest: "🌳", ev: "⚡", parking: "🅿️" };
+const catEmoji = (c?: string) => CAT_EMOJI[c || "water"] || "📍";
+
+function WaterMap({ points }: { points: SattuPoint[] }) {
+  const t = useT();
+  const [sel, setSel] = useState(0);
+  const active = points[sel] ?? points[0];
+  const mapsHref = (p: SattuPoint) =>
+    p.lat != null && p.lon != null
+      ? `https://www.google.com/maps/dir/?api=1&destination=${p.lat},${p.lon}`
+      : `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(p.name + ", Delhi NCR")}`;
+
   return (
     <div style={{ background: G.surface, borderRadius: 18, overflow: "hidden", border: `1px solid ${G.line}`, boxShadow: "0 2px 8px -4px rgba(10,24,18,.1)" }}>
-      {/* Map placeholder */}
-      <div style={{ height: 120, position: "relative", background: "repeating-linear-gradient(45deg,#E2F0E8,#E2F0E8 10px,#D8EBE0 10px,#D8EBE0 20px)" }}>
-        <div style={{ position: "absolute", inset: 0, background: "radial-gradient(200px 120px at 40% 60%, rgba(12,146,103,.1), transparent 70%)" }} />
-        {[["28%","42%"],["58%","30%"],["72%","62%"]].map(([l, t], i) => (
-          <div key={i} style={{ position: "absolute", left: l, top: t, transform: "translate(-50%,-100%)" }}>
-            <div style={{ width: 26, height: 26, borderRadius: "50%", background: G.green, border: "2.5px solid #fff", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 3px 8px rgba(0,0,0,.2)" }}>
-              <Droplets size={13} color="#fff" />
+      {/* Interactive map — tap a pin */}
+      <div style={{ height: 150, position: "relative", background: "repeating-linear-gradient(45deg,#E2F0E8,#E2F0E8 10px,#D8EBE0 10px,#D8EBE0 20px)" }}>
+        <div style={{ position: "absolute", inset: 0, background: "radial-gradient(220px 130px at 45% 60%, rgba(12,146,103,.12), transparent 70%)" }} />
+        <div style={{ position: "absolute", top: 8, left: 10, fontSize: 10, fontWeight: 600, color: G.muted, background: "rgba(255,255,255,.82)", padding: "3px 8px", borderRadius: 6 }}>{t("heat.tapPin")}</div>
+
+        {points.map((p, i) => {
+          const [l, top] = PIN_POS[i] ?? ["50%", "50%"];
+          const on = i === sel;
+          return (
+            <button key={i} onClick={() => setSel(i)} aria-label={p.name}
+              style={{ position: "absolute", left: l, top, transform: "translate(-50%,-100%)", background: "none", border: "none", cursor: "pointer", padding: 0, zIndex: on ? 4 : 1 }}>
+              {on && (
+                <div style={{ position: "absolute", bottom: "calc(100% + 5px)", left: "50%", transform: "translateX(-50%)", whiteSpace: "nowrap", background: G.ink, color: "#fff", fontSize: 10.5, fontWeight: 700, padding: "3px 8px", borderRadius: 7, boxShadow: "0 4px 10px -3px rgba(0,0,0,.4)" }}>
+                  {p.name}
+                  <span style={{ position: "absolute", top: "100%", left: "50%", transform: "translateX(-50%)", width: 0, height: 0, borderLeft: "4px solid transparent", borderRight: "4px solid transparent", borderTop: `4px solid ${G.ink}` }} />
+                </div>
+              )}
+              <div style={{ width: on ? 34 : 26, height: on ? 34 : 26, borderRadius: "50%", background: G.green, border: "2.5px solid #fff", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: on ? "0 0 0 4px rgba(10,144,96,.25), 0 4px 10px rgba(0,0,0,.25)" : "0 3px 8px rgba(0,0,0,.2)", transition: "all .18s" }}>
+                <span style={{ fontSize: on ? 16 : 13, lineHeight: 1 }}>{catEmoji(p.category)}</span>
+              </div>
+            </button>
+          );
+        })}
+
+        {/* You marker */}
+        <div style={{ position: "absolute", left: "45%", top: "80%", transform: "translate(-50%,-50%)", display: "flex", flexDirection: "column", alignItems: "center", gap: 3 }}>
+          <div style={{ width: 13, height: 13, borderRadius: "50%", background: G.blue, border: "3px solid #fff", boxShadow: "0 0 0 4px rgba(30,86,212,.18)" }} />
+          <span style={{ fontSize: 9, fontWeight: 700, color: G.blue, background: "rgba(255,255,255,.85)", padding: "1px 5px", borderRadius: 4 }}>{t("heat.you")}</span>
+        </div>
+        <div style={{ position: "absolute", bottom: 7, right: 10, fontWeight: 700, fontSize: 9.5, letterSpacing: ".5px", color: G.faint, background: "rgba(255,255,255,.85)", padding: "2px 6px", borderRadius: 5 }}>{t("heat.mapLive")}</div>
+      </div>
+
+      {/* Selected spot — what's on offer + directions */}
+      <div style={{ padding: "13px 14px", borderBottom: `1px solid ${G.line2}`, background: G.green50 }}>
+        <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 10 }}>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontWeight: 800, fontSize: 14.5, color: G.ink, lineHeight: 1.2 }}>{active.name}</div>
+            <div style={{ fontSize: 11.5, color: G.muted, marginTop: 2 }}>{active.time ? `${active.time} · ` : ""}{active.dist}</div>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 5, marginTop: 8 }}>
+              {active.stock.split(" · ").map((s, i) => (
+                <span key={i} style={{ fontSize: 11, fontWeight: 600, color: G.green700, background: "#fff", border: `1px solid ${G.green100}`, padding: "3px 9px", borderRadius: 7 }}>{s}</span>
+              ))}
             </div>
           </div>
-        ))}
-        <div style={{ position: "absolute", left: "45%", top: "75%", transform: "translate(-50%,-50%)" }}>
-          <div style={{ width: 13, height: 13, borderRadius: "50%", background: G.blue, border: "3px solid #fff", boxShadow: "0 0 0 4px rgba(30,86,212,.18)" }} />
-        </div>
-        <div style={{ position: "absolute", bottom: 7, right: 10, fontWeight: 700, fontSize: 9.5, letterSpacing: ".5px", color: G.faint, background: "rgba(255,255,255,.85)", padding: "2px 6px", borderRadius: 5 }}>
-          MAP · LIVE
+          <a href={mapsHref(active)} target="_blank" rel="noopener noreferrer"
+            style={{ flexShrink: 0, display: "flex", alignItems: "center", gap: 5, padding: "8px 12px", borderRadius: 11, background: G.green, color: "#fff", textDecoration: "none", fontWeight: 700, fontSize: 12 }}>
+            <Navigation size={14} /> {t("heat.directions")}
+          </a>
         </div>
       </div>
+
+      {/* All points — tap to select */}
       {points.map((p, i) => (
-        <div key={i} style={{ display: "flex", alignItems: "center", gap: 12, padding: "12px 14px", borderBottom: i < points.length - 1 ? `1px solid ${G.line2}` : "none" }}>
-          <div style={{ width: 34, height: 34, borderRadius: 10, background: G.green50, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-            <MapPin size={17} color={G.green700} />
+        <button key={i} onClick={() => setSel(i)}
+          style={{ display: "flex", alignItems: "center", gap: 12, padding: "12px 14px", width: "100%", textAlign: "left", background: i === sel ? "rgba(10,144,96,.06)" : "transparent", border: "none", borderBottom: i < points.length - 1 ? `1px solid ${G.line2}` : "none", cursor: "pointer" }}>
+          <div style={{ width: 34, height: 34, borderRadius: 10, background: i === sel ? G.green : G.green50, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, transition: "background .15s" }}>
+            <span style={{ fontSize: 17, lineHeight: 1 }}>{catEmoji(p.category)}</span>
           </div>
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ fontWeight: 700, fontSize: 13.5, color: G.ink, lineHeight: 1.2 }}>{p.name}</div>
-            <div style={{ fontSize: 11.5, color: G.muted, marginTop: 2 }}>{p.stock} · {p.time}</div>
+            <div style={{ fontSize: 11.5, color: G.muted, marginTop: 2 }}>{p.stock}{p.time ? ` · ${p.time}` : ""}</div>
           </div>
           <span style={{ fontWeight: 700, fontSize: 13, color: G.green700, flexShrink: 0, fontVariantNumeric: "tabular-nums" }}>{p.dist}</span>
-        </div>
+        </button>
       ))}
     </div>
   );
 }
 
 export default function HeatPage() {
-  const isHigh = HEAT.level === "high";
+  const t = useT();
+  const lang = useLang();
+  const base = getHeat(lang);
+  const [updatedAt, setUpdatedAt] = useState("");
+  const [live, setLive] = useState<Live | null>(null);
+  const [water, setWater] = useState<{ name: string | null; distKm: number; lat: number; lon: number; category?: string }[] | null>(null);
+  const [coords, setCoords] = useState<{ lat: number; lon: number } | null>(null);
+  const [cat, setCat] = useState<string>("all");
+  const [addOpen, setAddOpen] = useState(false);
+  const [addCat, setAddCat] = useState<string>("water");
+  const [addName, setAddName] = useState("");
+
+  useEffect(() => {
+    setUpdatedAt(new Date().toLocaleTimeString(localeTag(lang), { hour: "numeric", minute: "2-digit" }));
+  }, [lang]);
+
+  // Pull live weather + AQI (Open-Meteo, no key needed). Uses the rider's
+  // location if allowed (coords coarsened to ~1 km, never stored); otherwise
+  // falls back to Delhi NCR centre so real weather still shows.
+  useEffect(() => {
+    const load = async (lat: number, lon: number) => {
+      try {
+        const r = await fetch(`/api/conditions?lat=${lat}&lon=${lon}`);
+        const j = await r.json();
+        if (j?.live) setLive(j as Live);
+      } catch { /* keep sample data */ }
+      setCoords({ lat, lon });
+      // Prefer the crowdsourced DB (reliable); fall back to live OSM, then sample.
+      const db = await fetchNearbyWaterPoints(lat, lon);
+      if (db && db.length) { setWater(db); return; }
+      try {
+        const r = await fetch(`/api/water?lat=${lat}&lon=${lon}`);
+        const j = await r.json();
+        if (Array.isArray(j?.points) && j.points.length) setWater(j.points);
+      } catch { /* keep sample water points */ }
+    };
+    const DELHI = { lat: 28.61, lon: 77.21 };
+    if (typeof navigator !== "undefined" && "geolocation" in navigator) {
+      navigator.geolocation.getCurrentPosition(
+        (pos) => load(Math.round(pos.coords.latitude * 100) / 100, Math.round(pos.coords.longitude * 100) / 100),
+        () => load(DELHI.lat, DELHI.lon), // denied / failed → Delhi NCR
+        { timeout: 6000, maximumAge: 600000 }
+      );
+    } else {
+      load(DELHI.lat, DELHI.lon);
+    }
+  }, []);
+
+  // Merge live readings over the sample data where available.
+  const level: Tone = live ? live.level : "high";
+  const feelsLike = live ? Math.round(live.feelsLikeC) : base.feelsLike;
+  const levelLabel = live ? t(TONE_KEY[level]) : base.levelLabel;
+  const metrics: HeatMetric[] = live
+    ? base.metrics.map((m) => {
+        if (m.id === "aqi" && live.aqi != null) { const tone = aqiTone(live.aqi); return { ...m, value: String(live.aqi), tone, cat: t(TONE_KEY[tone]) }; }
+        if (m.id === "temp" && live.tempC != null) { const tone = tempTone(live.tempC); return { ...m, value: `${Math.round(live.tempC)}°`, tone, cat: t(TONE_KEY[tone]) }; }
+        if (m.id === "hum" && live.humidity != null) return { ...m, value: `${Math.round(live.humidity)}%` };
+        if (m.id === "uv" && live.uv != null) { const tone = uvTone(live.uv); return { ...m, value: String(Math.round(live.uv)), tone, cat: t(TONE_KEY[tone]) }; }
+        return m;
+      })
+    : base.metrics;
+  const d = base; // fatigue timeline + sample fallback
+  // Translate a category id to its localised label (type-safe — no dynamic keys).
+  const catLabel = (c?: string) => {
+    switch (c) {
+      case "toilet": return t("amen.toilet");
+      case "food": return t("amen.food");
+      case "rest": return t("amen.rest");
+      case "ev": return t("amen.ev");
+      case "parking": return t("amen.parking");
+      default: return t("amen.water");
+    }
+  };
+  // Real nearby amenities (within 5 km) when we have them; else sample list.
+  const allPoints: SattuPoint[] = water && water.length
+    ? water.map((p) => ({
+        name: p.name || catLabel(p.category),
+        dist: `${p.distKm} km`,
+        time: "",
+        stock: catLabel(p.category),
+        lat: p.lat,
+        lon: p.lon,
+        category: p.category || "water",
+      }))
+    : d.sattu;
+  const shown = cat === "all" ? allPoints : allPoints.filter((p) => (p.category || "water") === cat);
+
+  const handleAddSpot = async () => {
+    if (!coords || !addName.trim()) return;
+    const ok = await addWaterPoint(coords.lat, coords.lon, addName.trim(), addCat);
+    if (ok) {
+      const db = await fetchNearbyWaterPoints(coords.lat, coords.lon);
+      if (db) setWater(db);
+      setAddName(""); setAddOpen(false);
+      window.alert(t("heat.added"));
+    }
+  };
 
   return (
     <div style={{ background: G.bg, minHeight: "100%", paddingBottom: 24 }}>
       <div style={{ maxWidth: 480, margin: "0 auto" }}>
         {/* Heading */}
         <div style={{ padding: "24px 20px 0" }}>
-          <h1 style={{ margin: "0 0 2px", fontWeight: 800, fontSize: 26, letterSpacing: "-.6px", color: G.ink }}>Heat Safety</h1>
-          <div style={{ fontSize: 12.5, color: G.muted }}>Updated 9:40 AM · refreshes hourly · Delhi NCR</div>
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <h1 style={{ margin: "0 0 2px", fontWeight: 800, fontSize: 26, letterSpacing: "-.6px", color: G.ink }}>{t("heat.title")}</h1>
+            <span style={{ display: "inline-flex", alignItems: "center", gap: 4, padding: "2px 8px", borderRadius: 100, fontSize: 10, fontWeight: 800, letterSpacing: ".4px", background: live ? G.green50 : "#EDEFEE", color: live ? G.green700 : G.faint }}>
+              {live && <span style={{ width: 5, height: 5, borderRadius: "50%", background: G.green, display: "inline-block", animation: "rk-pulse 1.4s infinite" }} />}
+              {live ? t("heat.live") : t("heat.sample")}
+            </span>
+          </div>
+          <div style={{ fontSize: 12.5, color: G.muted }}>{updatedAt ? `${t("heat.updated")} ${updatedAt} · ` : ""}{t("heat.refreshes")}</div>
         </div>
 
         {/* Hero */}
         <div style={{ margin: "16px 20px 0" }}>
-          <div style={{ borderRadius: 22, padding: "20px 20px 22px", position: "relative", overflow: "hidden", background: "linear-gradient(155deg,#D45C00,#B03A00 90%)", boxShadow: "0 18px 40px -20px rgba(180,60,0,.55)", animation: "rk-fadeUp .4s both" }}>
+          <div style={{ borderRadius: 22, padding: "20px 20px 22px", position: "relative", overflow: "hidden", background: HERO_BG[level], boxShadow: "0 18px 40px -20px rgba(40,40,40,.45)", animation: "rk-fadeUp .4s both" }}>
             <div style={{ position: "absolute", top: -30, right: -20, opacity: .12 }}>
               <Flame size={140} color="#fff" />
             </div>
@@ -149,17 +325,17 @@ export default function HeatPage() {
               <div style={{ display: "flex", alignItems: "center", gap: 7, marginBottom: 12 }}>
                 <span style={{ width: 8, height: 8, borderRadius: "50%", background: "#fff", animation: "rk-pulse 1.5s infinite", display: "inline-block" }} />
                 <span style={{ fontWeight: 700, fontSize: 12, letterSpacing: ".8px", textTransform: "uppercase", color: "rgba(255,255,255,.85)" }}>
-                  Heat Safety Index · Delhi NCR
+                  {t("heat.indexNcr")}
                 </span>
               </div>
               <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between" }}>
                 <div>
-                  <div style={{ fontWeight: 800, fontSize: 44, lineHeight: .9, letterSpacing: "-1.4px", color: "#fff" }}>{HEAT.levelLabel}</div>
-                  <div style={{ fontSize: 13.5, color: "rgba(255,255,255,.85)", marginTop: 8, fontWeight: 600 }}>Take regular breaks and hydrate</div>
+                  <div style={{ fontWeight: 800, fontSize: 44, lineHeight: .9, letterSpacing: "-1.4px", color: "#fff" }}>{levelLabel}</div>
+                  <div style={{ fontSize: 13.5, color: "rgba(255,255,255,.85)", marginTop: 8, fontWeight: 600 }}>{t("heat.takeBreaks")}</div>
                 </div>
                 <div style={{ textAlign: "right" }}>
-                  <div style={{ fontWeight: 800, fontSize: 38, color: "#fff", letterSpacing: -1, lineHeight: 1, fontVariantNumeric: "tabular-nums" }}>{HEAT.feelsLike}°</div>
-                  <div style={{ fontSize: 11.5, color: "rgba(255,255,255,.75)", fontWeight: 600 }}>feels like</div>
+                  <div style={{ fontWeight: 800, fontSize: 38, color: "#fff", letterSpacing: -1, lineHeight: 1, fontVariantNumeric: "tabular-nums" }}>{feelsLike}°</div>
+                  <div style={{ fontSize: 11.5, color: "rgba(255,255,255,.75)", fontWeight: 600 }}>{t("heat.feelsLike")}</div>
                 </div>
               </div>
             </div>
@@ -168,25 +344,70 @@ export default function HeatPage() {
 
         {/* Metrics grid */}
         <div style={{ padding: "18px 20px 0" }}>
-          <div style={{ fontWeight: 700, fontSize: 12, letterSpacing: ".7px", textTransform: "uppercase", color: G.faint, marginBottom: 11 }}>Right now</div>
+          <div style={{ fontWeight: 700, fontSize: 12, letterSpacing: ".7px", textTransform: "uppercase", color: G.faint, marginBottom: 11 }}>{t("heat.rightNow")}</div>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-            {HEAT.metrics.map((m) => <MetricTile key={m.id} m={m} />)}
+            {metrics.map((m) => <MetricTile key={m.id} m={m} />)}
           </div>
         </div>
 
         {/* Fatigue timeline */}
         <div style={{ padding: "18px 20px 0" }}>
-          <div style={{ fontWeight: 700, fontSize: 12, letterSpacing: ".7px", textTransform: "uppercase", color: G.faint, marginBottom: 11 }}>Plan your breaks</div>
-          <FatigueTimeline />
+          <div style={{ fontWeight: 700, fontSize: 12, letterSpacing: ".7px", textTransform: "uppercase", color: G.faint, marginBottom: 11 }}>{t("heat.planBreaks")}</div>
+          <FatigueTimeline d={d} />
         </div>
 
-        {/* Sattu map */}
+        {/* Rider amenities map */}
         <div style={{ padding: "18px 20px 0" }}>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 11 }}>
-            <span style={{ fontWeight: 700, fontSize: 12, letterSpacing: ".7px", textTransform: "uppercase", color: G.faint }}>Free Sattu &amp; ORS points</span>
-            <span style={{ fontSize: 11.5, fontWeight: 700, color: G.green700 }}>3 nearby</span>
+            <span style={{ fontWeight: 700, fontSize: 12, letterSpacing: ".7px", textTransform: "uppercase", color: G.faint }}>{t("heat.amenities")}</span>
+            <span style={{ fontSize: 11.5, fontWeight: 700, color: G.green700 }}>{shown.length} {t("heat.nearby")}</span>
           </div>
-          <SattuSection points={HEAT.sattu} />
+
+          {/* Category filter chips */}
+          <div className="noscroll" style={{ display: "flex", gap: 7, overflowX: "auto", paddingBottom: 11, marginBottom: 1 }}>
+            {["all", ...AMEN_CATS].map((c) => {
+              const on = cat === c;
+              return (
+                <button key={c} onClick={() => setCat(c)} style={{ flexShrink: 0, display: "flex", alignItems: "center", gap: 5, height: 32, padding: "0 12px", borderRadius: 9, cursor: "pointer", fontSize: 12.5, fontWeight: 700, whiteSpace: "nowrap", background: on ? G.green : G.surface, border: `1.5px solid ${on ? G.green : G.line}`, color: on ? "#fff" : G.muted }}>
+                  {c !== "all" && <span style={{ fontSize: 13 }}>{catEmoji(c)}</span>}
+                  {c === "all" ? t("amen.all") : catLabel(c)}
+                </button>
+              );
+            })}
+          </div>
+
+          {shown.length > 0 ? (
+            <WaterMap key={cat} points={shown} />
+          ) : (
+            <div style={{ fontSize: 13, color: G.muted, padding: "16px", background: G.surface, borderRadius: 14, border: `1px solid ${G.line}`, textAlign: "center" }}>{t("amen.none")}</div>
+          )}
+
+          {supabaseConfigured() && coords && (
+            addOpen ? (
+              <div style={{ marginTop: 10, padding: "14px", borderRadius: 14, background: G.surface, border: `1.5px solid ${G.green}` }}>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 11 }}>
+                  {AMEN_CATS.map((c) => {
+                    const on = addCat === c;
+                    return (
+                      <button key={c} onClick={() => setAddCat(c)} style={{ display: "flex", alignItems: "center", gap: 5, height: 32, padding: "0 11px", borderRadius: 9, cursor: "pointer", fontSize: 12.5, fontWeight: 700, background: on ? G.green50 : G.bg, border: `1.5px solid ${on ? G.green : G.line}`, color: on ? G.green700 : G.muted }}>
+                        <span style={{ fontSize: 13 }}>{catEmoji(c)}</span>{catLabel(c)}
+                      </button>
+                    );
+                  })}
+                </div>
+                <input value={addName} onChange={(e) => setAddName(e.target.value)} placeholder={t("amen.namePh")}
+                  style={{ width: "100%", height: 44, borderRadius: 11, border: `1.5px solid ${G.line}`, padding: "0 13px", fontSize: 15, outline: "none", background: G.bg, color: G.ink, marginBottom: 10 }} />
+                <div style={{ display: "flex", gap: 8 }}>
+                  <button onClick={() => { setAddOpen(false); setAddName(""); }} style={{ flex: 1, height: 44, borderRadius: 11, border: `1.5px solid ${G.line}`, background: G.surface, color: G.muted, fontWeight: 700, fontSize: 14, cursor: "pointer" }}>{t("earn.cancel")}</button>
+                  <button onClick={handleAddSpot} disabled={!addName.trim()} style={{ flex: 2, height: 44, borderRadius: 11, border: "none", background: addName.trim() ? "linear-gradient(180deg,#0B6B48,#064D33)" : "#B8D8CC", color: "#fff", fontWeight: 700, fontSize: 14, cursor: addName.trim() ? "pointer" : "not-allowed" }}>{t("amen.addBtn")}</button>
+                </div>
+              </div>
+            ) : (
+              <button onClick={() => { setAddOpen(true); if (cat !== "all") setAddCat(cat); }} style={{ marginTop: 10, width: "100%", padding: "11px", borderRadius: 12, background: G.green50, color: G.green700, border: `1.5px dashed ${G.green100}`, fontWeight: 700, fontSize: 13, cursor: "pointer" }}>
+                {t("heat.addSpot")}
+              </button>
+            )
+          )}
         </div>
 
         {/* Advice card */}
@@ -196,9 +417,9 @@ export default function HeatPage() {
               <Droplets size={18} color={G.blue} />
             </div>
             <div>
-              <div style={{ fontWeight: 700, fontSize: 13.5, color: G.blueInk, marginBottom: 4 }}>Beat the heat today</div>
+              <div style={{ fontWeight: 700, fontSize: 13.5, color: G.blueInk, marginBottom: 4 }}>{t("heat.beat")}</div>
               <p style={{ margin: 0, fontSize: 12.5, lineHeight: 1.5, color: G.blueInk }}>
-                Drink 1 glass water every 30 min · carry ORS · park in shade · wear light cotton. Skip the 12–3:30 PM window.
+                {t("heat.beatBody")}
               </p>
             </div>
           </div>
@@ -209,8 +430,53 @@ export default function HeatPage() {
           <div style={{ background: "#FDE8E7", borderRadius: 14, padding: "12px 16px", display: "flex", alignItems: "center", gap: 10, border: "1px solid rgba(201,59,53,.2)" }}>
             <AlertTriangle size={18} color={G.red} />
             <p style={{ margin: 0, fontSize: 13, color: "#7A1F1B", fontWeight: 600 }}>
-              Avoid riding 12:00 – 3:30 PM today. Heat index: 46°C
+              {t("heat.avoidBanner")}
             </p>
+          </div>
+        </div>
+
+        {/* Emergency services */}
+        <div style={{ margin: "12px 20px 0" }}>
+          <div style={{ background: G.surface, borderRadius: 16, padding: "14px 16px", border: `1px solid ${G.line}` }}>
+            <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", marginBottom: 11 }}>
+              <div style={{ fontSize: 10.5, fontWeight: 800, textTransform: "uppercase", letterSpacing: ".7px", color: G.red }}>{t("heat.emergency")}</div>
+              <div style={{ fontSize: 10.5, color: G.faint, fontWeight: 600 }}>{t("heat.callNow")}</div>
+            </div>
+
+            {/* Primary: unified emergency 112 */}
+            <a href="tel:112" style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 9, height: 52, borderRadius: 13, background: "linear-gradient(180deg,#D24B45,#B83030)", color: "#fff", textDecoration: "none", fontWeight: 800, fontSize: 16, boxShadow: "0 10px 24px -10px rgba(184,48,48,.6)", marginBottom: 10 }}>
+              <Phone size={18} /> {t("heat.call112")} · 112
+            </a>
+
+            {/* Grid of specific services */}
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+              {[
+                { label: t("heat.ambulance"), num: "108" },
+                { label: t("heat.police"), num: "100" },
+                { label: t("heat.fire"), num: "101" },
+                { label: t("heat.women"), num: "1091" },
+                { label: t("heat.roadHelp"), num: "1073" },
+              ].map((s) => (
+                <a key={s.num} href={`tel:${s.num}`} style={{ display: "flex", alignItems: "center", gap: 9, padding: "10px 12px", borderRadius: 12, background: G.redBg, border: "1px solid rgba(184,48,48,.18)", textDecoration: "none" }}>
+                  <div style={{ width: 30, height: 30, borderRadius: 9, background: "#fff", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                    <Phone size={14} color={G.red} />
+                  </div>
+                  <div style={{ minWidth: 0 }}>
+                    <div style={{ fontSize: 12.5, fontWeight: 800, color: G.ink, lineHeight: 1.15, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{s.label}</div>
+                    <div style={{ fontSize: 12, fontWeight: 700, color: G.red, lineHeight: 1.2 }}>{s.num}</div>
+                  </div>
+                </a>
+              ))}
+              <a href="https://www.google.com/maps/search/?api=1&query=hospital+near+me" target="_blank" rel="noopener noreferrer" style={{ display: "flex", alignItems: "center", gap: 9, padding: "10px 12px", borderRadius: 12, background: G.green50, border: `1px solid ${G.green100}`, textDecoration: "none" }}>
+                <div style={{ width: 30, height: 30, borderRadius: 9, background: "#fff", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                  <MapPin size={14} color={G.green700} />
+                </div>
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ fontSize: 12.5, fontWeight: 800, color: G.ink, lineHeight: 1.15, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{t("heat.nearestHospital")}</div>
+                  <div style={{ fontSize: 11.5, fontWeight: 600, color: G.green700, lineHeight: 1.2 }}>Maps</div>
+                </div>
+              </a>
+            </div>
           </div>
         </div>
       </div>
