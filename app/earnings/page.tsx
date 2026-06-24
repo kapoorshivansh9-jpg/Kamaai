@@ -4,6 +4,8 @@ import { useState, useEffect } from "react";
 import { Wallet, TrendingUp, Pencil, Trash2, X } from "lucide-react";
 import { useProfile } from "@/lib/ridekamao-profile";
 import { useT, useLang, localeTag } from "@/lib/i18n";
+import { earningsCurve } from "@/lib/ridekamao-data";
+import { EarningsChart } from "@/components/earnings-chart";
 
 const G = {
   ink: "#05160E", ink2: "#163022", muted: "#456055", faint: "#7A9A8A",
@@ -351,6 +353,14 @@ export default function EarningsPage() {
             </div>
           )}
         </div>
+
+        {/* Earnings outlook — 8-week projection */}
+        {profile && (
+          <div style={{ padding: "20px 20px 0" }}>
+            <div style={{ fontWeight: 700, fontSize: 12, letterSpacing: ".7px", textTransform: "uppercase", color: G.faint, marginBottom: 12 }}>{t("shifts.earningsOutlook")}</div>
+            <EarningsChart curve={earningsCurve(profile)} />
+          </div>
+        )}
       </div>
     </div>
   );

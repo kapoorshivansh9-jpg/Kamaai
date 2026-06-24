@@ -1,14 +1,13 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { MapPin, AlertTriangle, TrendingUp, Clock, Target, Zap, Navigation, Lightbulb, ChevronDown, Wallet } from "lucide-react";
+import { MapPin, AlertTriangle, TrendingUp, Clock, Target, Zap, Navigation, Lightbulb, ChevronDown } from "lucide-react";
 import { useProfile } from "@/lib/ridekamao-profile";
-import { windowsFor, earningsCurve, detectZone, isWindowActive } from "@/lib/ridekamao-data";
+import { windowsFor, detectZone, isWindowActive } from "@/lib/ridekamao-data";
 import { trackEvent } from "@/lib/supabase-events";
 import { useT, useLang, profTitle, localeTag } from "@/lib/i18n";
-import type { ShiftWindow, EarningsCurve, Zone } from "@/lib/ridekamao-data";
+import type { ShiftWindow, Zone } from "@/lib/ridekamao-data";
 
 const G = {
   green: "#0A9060", green700: "#045234", green600: "#066B47", green50: "#D8F5E8", green100: "#B4EAD0",
@@ -43,8 +42,45 @@ const HEAT_CHIP: Record<"peak" | "high" | "good", { bg: string; ink: string; key
   good: { bg: "#E6EEFF", ink: "#0C2A7A", key: "d.good" },
 };
 
-function DetailPanel({ d, tag }: { d: ShiftWindow["detail"]; tag: typeof TAG[keyof typeof TAG] }) {
+type Spot = { name: string; kind: string; lat: number; lon: number; distKm: number };
+const dirUrl = (lat: number, lon: number) => `https://www.google.com/maps/dir/?api=1&destination=${lat},${lon}`;
+const searchUrl = (q: string) => `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(q)}`;
+
+// Which OSM spot kinds matter for each window, so every time slot shows DIFFERENT,
+// time-appropriate places (breakfast → cafés/bakeries; lunch → restaurants; etc.).
+const WINDOW_KINDS: Record<string, Record<string, string[]>> = {
+  food: { breakfast: ["Café", "Bakery", "Fast food"], "mid-morning": ["Café", "Bakery", "Fast food"], lunch: ["Restaurant", "Fast food"], afternoon: ["Café", "Ice cream", "Bakery"], dinner: ["Restaurant", "Fast food"], late: ["Fast food", "Grocery"] },
+  qcom: { "morning-grocery": ["Grocery", "Market"], midday: ["Grocery"], "pre-evening": ["Grocery", "Market"], evening: ["Grocery", "Market"], late: ["Grocery"] },
+  cab: { "airport-early": ["Hotel"], "office-am": ["Mall", "Hotel"], "mid-morning": ["Mall", "Hotel"], midday: ["Mall", "Hotel"], "pre-evening": ["Mall", "Nightlife"], "office-pm": ["Mall", "Nightlife"], night: ["Nightlife", "Hotel"] },
+  auto: { "morning-feeder": ["Metro", "Bus stand"], "mid-morning": ["Market", "Metro"], midday: ["Market", "Mall"], afternoon: ["Market", "Mall"], "evening-feeder": ["Metro", "Bus stand"], night: ["Market", "Metro"] },
+  biketx: { morning: ["Metro", "Bus stand"], midday: ["Market", "Mall"], afternoon: ["Market", "Mall"], evening: ["Metro", "Bus stand"], night: ["Market", "Metro"] },
+};
+function spotsForWindow(prof: string, windowId: string, spots: Spot[]): Spot[] {
+  const kinds = WINDOW_KINDS[prof]?.[windowId];
+  if (!kinds) return spots;
+  const matched = spots.filter((s) => kinds.includes(s.kind));
+  return matched.length ? matched : spots; // keep differentiation when possible, else show what's near
+}
+
+function SpotRow({ href, title, sub }: { href: string; title: string; sub: string }) {
+  return (
+    <a href={href} target="_blank" rel="noopener noreferrer"
+      style={{ display: "flex", gap: 10, alignItems: "center", padding: "9px 11px", borderRadius: 11, background: G.surface, border: `1px solid ${G.line}`, textDecoration: "none" }}>
+      <div style={{ width: 26, height: 26, borderRadius: 8, flexShrink: 0, background: G.green50, display: "flex", alignItems: "center", justifyContent: "center" }}>
+        <MapPin size={14} color={G.green700} />
+      </div>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontSize: 13, fontWeight: 700, color: G.ink, lineHeight: 1.25, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{title}</div>
+        <div style={{ fontSize: 11.5, color: G.muted, marginTop: 2, lineHeight: 1.4 }}>{sub}</div>
+      </div>
+      <Navigation size={15} color={G.green} style={{ flexShrink: 0 }} />
+    </a>
+  );
+}
+
+function DetailPanel({ d, tag, spots, area }: { d: ShiftWindow["detail"]; tag: typeof TAG[keyof typeof TAG]; spots: Spot[]; area: string }) {
   const t = useT();
+  const live = spots.slice(0, 4);
   return (
     <div style={{ padding: "14px 16px 16px", borderTop: `1px solid ${G.line2}`, background: `${tag.bg}40`, animation: "rk-fadeUp .25s both" }}>
       {/* Where to be */}
@@ -56,44 +92,12 @@ function DetailPanel({ d, tag }: { d: ShiftWindow["detail"]; tag: typeof TAG[key
         </div>
       </div>
 
-      {/* Hotspots */}
+      {/* Best spots — every place opens Google Maps directions */}
       <div style={{ fontSize: 9.5, fontWeight: 800, letterSpacing: ".7px", textTransform: "uppercase", color: G.faint, marginBottom: 8 }}>{t("d.bestSpots")}</div>
       <div style={{ display: "flex", flexDirection: "column", gap: 7, marginBottom: 14 }}>
-        {d.hotspots.map((h, i) => {
-          const chip = HEAT_CHIP[h.heat];
-          return (
-            <div key={i} style={{ display: "flex", gap: 10, alignItems: "flex-start", padding: "9px 11px", borderRadius: 11, background: G.surface, border: `1px solid ${G.line}` }}>
-              <div style={{ width: 26, height: 26, borderRadius: 8, flexShrink: 0, background: G.green50, display: "flex", alignItems: "center", justifyContent: "center" }}>
-                <MapPin size={14} color={G.green700} />
-              </div>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: 13, fontWeight: 700, color: G.ink, lineHeight: 1.25 }}>{h.name}</div>
-                <div style={{ fontSize: 11.5, color: G.muted, marginTop: 2, lineHeight: 1.4 }}>{h.why}</div>
-              </div>
-              <span style={{ flexShrink: 0, padding: "2px 7px", borderRadius: 6, fontSize: 9.5, fontWeight: 800, letterSpacing: ".3px", textTransform: "uppercase", background: chip.bg, color: chip.ink }}>{t(chip.key)}</span>
-            </div>
-          );
-        })}
-      </div>
-
-      {/* Why now */}
-      <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 8 }}>
-        <Zap size={12} color={G.green700} />
-        <span style={{ fontSize: 9.5, fontWeight: 800, letterSpacing: ".7px", textTransform: "uppercase", color: G.faint }}>{t("d.whyGood")}</span>
-      </div>
-      <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 14 }}>
-        {d.drivers.map((s, i) => (
-          <span key={i} style={{ padding: "5px 10px", borderRadius: 8, background: G.surface, border: `1px solid ${G.line}`, fontSize: 11.5, fontWeight: 600, color: G.ink2 }}>{s}</span>
-        ))}
-      </div>
-
-      {/* Traffic */}
-      <div style={{ display: "flex", gap: 9, alignItems: "flex-start", marginBottom: 12 }}>
-        <Navigation size={14} color={G.muted} style={{ flexShrink: 0, marginTop: 2 }} />
-        <div>
-          <span style={{ fontSize: 11, fontWeight: 800, color: G.ink2 }}>{t("d.traffic")} · </span>
-          <span style={{ fontSize: 12, color: G.muted, lineHeight: 1.45 }}>{d.traffic}</span>
-        </div>
+        {live.length > 0
+          ? live.map((s, i) => <SpotRow key={i} href={dirUrl(s.lat, s.lon)} title={s.name} sub={`${s.kind} · ${s.distKm} km`} />)
+          : d.hotspots.map((h, i) => <SpotRow key={i} href={searchUrl(`${h.name}, ${area}`)} title={h.name} sub={h.why} />)}
       </div>
 
       {/* Tip */}
@@ -105,10 +109,11 @@ function DetailPanel({ d, tag }: { d: ShiftWindow["detail"]; tag: typeof TAG[key
   );
 }
 
-function WindowCard({ w, idx, isAvoid, active }: { w: ShiftWindow; idx: number; isAvoid: boolean; active?: boolean }) {
+function WindowCard({ w, idx, isAvoid, active, spots, area, profId }: { w: ShiftWindow; idx: number; isAvoid: boolean; active?: boolean; spots: Spot[]; area: string; profId: string }) {
   const [open, setOpen] = useState((idx === 0 || !!active) && !isAvoid);
   const tag = TAG[w.tag];
   const t = useT();
+  const winSpots = spotsForWindow(profId, w.id, spots);
 
   if (isAvoid) {
     return (
@@ -185,65 +190,7 @@ function WindowCard({ w, idx, isAvoid, active }: { w: ShiftWindow; idx: number; 
         </button>
       )}
 
-      {open && <DetailPanel d={w.detail} tag={tag} />}
-    </div>
-  );
-}
-
-function EarningsChart({ curve }: { curve: EarningsCurve }) {
-  const W = 340, H = 160, PL = 6, PR = 6, PT = 16, PB = 24;
-  const xs = (i: number) => PL + (i / (curve.weeks.length - 1)) * (W - PL - PR);
-  const allVals = curve.weeks.flatMap((w) => [w.base, w.proj]);
-  const lo = Math.min(...allVals) * 0.93, hi = Math.max(...allVals) * 1.04;
-  const ys = (v: number) => PT + (1 - (v - lo) / (hi - lo)) * (H - PT - PB);
-  const line = (key: "base" | "proj") =>
-    curve.weeks.map((w, i) => `${i ? "L" : "M"}${xs(i).toFixed(1)} ${ys(w[key]).toFixed(1)}`).join(" ");
-  const area = `${line("proj")} L${xs(curve.weeks.length - 1)} ${H - PB} L${xs(0)} ${H - PB} Z`;
-  const [mounted, setMounted] = useState(false);
-  useEffect(() => { const id = setTimeout(() => setMounted(true), 80); return () => clearTimeout(id); }, []);
-  const uplift = Math.round(((curve.projected - curve.now) / curve.now) * 100);
-  const t = useT();
-
-  return (
-    <div style={{ background: G.surface, borderRadius: 18, padding: "16px 14px 10px", border: `1px solid ${G.line}`, boxShadow: "0 2px 8px -4px rgba(10,24,18,.1)" }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 12 }}>
-        <div>
-          <div style={{ fontWeight: 800, fontSize: 14.5, color: G.ink }}>{t("shifts.earningsProjection")}</div>
-          <div style={{ fontSize: 11.5, color: G.muted, marginTop: 2 }}>{t("shifts.eightWeeks")}</div>
-        </div>
-        <div style={{ display: "flex", alignItems: "center", gap: 5, padding: "4px 8px", borderRadius: 8, background: G.green50 }}>
-          <TrendingUp size={13} color={G.green700} />
-          <span style={{ fontWeight: 800, fontSize: 13, color: G.green700, fontVariantNumeric: "tabular-nums" }}>+{uplift}%</span>
-        </div>
-      </div>
-      <div style={{ display: "flex", alignItems: "flex-end", gap: 14, marginBottom: 10 }}>
-        <div>
-          <div style={{ fontSize: 10, fontWeight: 700, color: G.faint, textTransform: "uppercase" }}>{t("shifts.nowWeek")}</div>
-          <div style={{ fontWeight: 700, fontSize: 17, color: G.ink2, fontVariantNumeric: "tabular-nums" }}>₹{curve.now.toLocaleString("en-IN")}</div>
-        </div>
-        <div style={{ color: G.faint, fontSize: 16, marginBottom: 3 }}>→</div>
-        <div>
-          <div style={{ fontSize: 10, fontWeight: 700, color: G.green700, textTransform: "uppercase" }}>{t("shifts.week8")}</div>
-          <div style={{ fontWeight: 800, fontSize: 21, color: G.green700, letterSpacing: "-.4px", fontVariantNumeric: "tabular-nums" }}>₹{curve.projected.toLocaleString("en-IN")}</div>
-        </div>
-      </div>
-      <svg viewBox={`0 0 ${W} ${H}`} style={{ width: "100%", height: "auto", display: "block" }}>
-        <defs>
-          <linearGradient id="ef" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor={G.green} stopOpacity="0.25" />
-            <stop offset="100%" stopColor={G.green} stopOpacity="0" />
-          </linearGradient>
-        </defs>
-        {[0,1,2,3].map((i) => { const y = PT + i * ((H-PT-PB)/3); return <line key={i} x1={PL} y1={y} x2={W-PR} y2={y} stroke={G.line2} strokeWidth="1" />; })}
-        <line x1={PL} y1={ys(curve.target)} x2={W-PR} y2={ys(curve.target)} stroke={G.amber} strokeWidth="1.5" strokeDasharray="4 4" opacity="0.8" />
-        <path d={area} fill="url(#ef)" opacity={mounted ? 1 : 0} style={{ transition: "opacity .8s .3s" }} />
-        <path d={line("base")} fill="none" stroke={G.faint} strokeWidth="1.8" strokeDasharray="3 4" opacity="0.5" />
-        <path d={line("proj")} fill="none" stroke={G.green} strokeWidth="2.5" strokeLinecap="round" strokeDasharray="900" strokeDashoffset={mounted ? 0 : 900} style={{ transition: "stroke-dashoffset 1.4s cubic-bezier(.4,0,.2,1)" }} />
-        <circle cx={xs(curve.weeks.length-1)} cy={ys(curve.projected)} r="5" fill={G.green} stroke="#fff" strokeWidth="2" opacity={mounted ? 1 : 0} style={{ transition: "opacity .4s 1.2s" }} />
-        {curve.weeks.map((w, i) => (i % 2 === 0 || i === curve.weeks.length - 1) && (
-          <text key={i} x={xs(i)} y={H-6} textAnchor="middle" fontSize="9" fill={G.faint}>W{w.w}</text>
-        ))}
-      </svg>
+      {open && <DetailPanel d={w.detail} tag={tag} spots={winSpots} area={area} />}
     </div>
   );
 }
@@ -254,6 +201,9 @@ export default function ShiftsPage() {
   const t = useT();
   const lang = useLang();
   const [zone, setZone] = useState<Zone | null>(null);
+  const [coords, setCoords] = useState<{ lat: number; lon: number } | null>(null);
+  const [spots, setSpots] = useState<Spot[]>([]);
+  const [traffic, setTraffic] = useState<{ level: "light" | "moderate" | "heavy" } | null>(null);
   const [locationStatus, setLocationStatus] = useState<"idle" | "requesting" | "granted" | "denied">("idle");
 
   useEffect(() => {
@@ -267,8 +217,9 @@ export default function ShiftsPage() {
       setLocationStatus("requesting");
       navigator.geolocation.getCurrentPosition(
         (pos) => {
-          const z = detectZone(pos.coords.latitude, pos.coords.longitude);
-          setZone(z);
+          const lat = pos.coords.latitude, lon = pos.coords.longitude;
+          setZone(detectZone(lat, lon));
+          setCoords({ lat: Math.round(lat * 100) / 100, lon: Math.round(lon * 100) / 100 });
           setLocationStatus("granted");
         },
         () => setLocationStatus("denied"),
@@ -277,12 +228,29 @@ export default function ShiftsPage() {
     }
   }, [profile]);
 
+  // Pull real nearby places for THIS gig type from OpenStreetMap (/api/hotspots).
+  useEffect(() => {
+    if (!profile || !coords) return;
+    let cancelled = false;
+    fetch(`/api/hotspots?lat=${coords.lat}&lon=${coords.lon}&prof=${profile.profession}`)
+      .then((r) => r.json())
+      .then((j) => { if (!cancelled && Array.isArray(j?.spots)) setSpots(j.spots); })
+      .catch(() => { /* keep playbook spots */ });
+    // Live road congestion (TomTom; no-op without TOMTOM_API_KEY).
+    fetch(`/api/traffic?lat=${coords.lat}&lon=${coords.lon}`)
+      .then((r) => r.json())
+      .then((j) => { if (!cancelled && j?.available) setTraffic({ level: j.level }); })
+      .catch(() => { /* no traffic signal */ });
+    return () => { cancelled = true; };
+  }, [profile, coords]);
+
   if (loading || !profile) return null;
 
   const now = new Date();
   const allWindows = windowsFor(profile.profession, zone, now, lang);
   const avoidWindow = allWindows.find((w) => w.tag === "avoid");
   const rideWindows = allWindows.filter((w) => w.tag !== "avoid");
+  const area = zone ? zone.label : t("common.ncr");
 
   const dateStr = now.toLocaleDateString(localeTag(lang), { weekday: "long", day: "numeric", month: "long" });
 
@@ -290,7 +258,6 @@ export default function ShiftsPage() {
   const todayTotal = Math.round(
     rideWindows.slice(0, 3).reduce((s, w, i) => s + w.rphr * (hoursArr[i] ?? 2), 0)
   );
-  const curve = earningsCurve(profile);
 
   return (
     <div style={{ background: G.bg, minHeight: "100%", paddingBottom: 24 }}>
@@ -315,6 +282,19 @@ export default function ShiftsPage() {
           </div>
         </div>
       </div>
+
+      {/* Live traffic near you (TomTom) */}
+      {traffic && (
+        <div style={{ margin: "14px 20px 0", display: "flex", alignItems: "center", gap: 8, padding: "9px 13px", borderRadius: 12, flexWrap: "wrap",
+          background: traffic.level === "heavy" ? G.redBg : traffic.level === "moderate" ? G.amberBg : G.green50,
+          border: `1px solid ${traffic.level === "heavy" ? "rgba(201,59,53,.3)" : traffic.level === "moderate" ? G.amber : G.green100}` }}>
+          <span style={{ fontSize: 14 }}>🚦</span>
+          <span style={{ fontSize: 12.5, fontWeight: 800, color: traffic.level === "heavy" ? G.redInk : traffic.level === "moderate" ? G.amberInk : G.green700 }}>
+            {t("shifts.trafficNow")}: {t(traffic.level === "heavy" ? "traffic.heavy" : traffic.level === "moderate" ? "traffic.moderate" : "traffic.light")}
+          </span>
+          {traffic.level === "heavy" && <span style={{ fontSize: 11.5, color: G.redInk, lineHeight: 1.35 }}>· {t("shifts.trafficHeavyTip")}</span>}
+        </div>
+      )}
 
       {/* Today's total hero */}
       <div style={{ margin: "18px 20px 0" }}>
@@ -364,19 +344,10 @@ export default function ShiftsPage() {
       <div style={{ padding: "18px 20px 0" }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
           <span style={{ fontWeight: 700, fontSize: 12, letterSpacing: ".7px", textTransform: "uppercase", color: G.faint }}>{t("shifts.allWindows")}</span>
-          <span style={{ fontSize: 11.5, fontWeight: 700, color: G.green700 }}>{rideWindows.length} {t("shifts.ride")} · 1 {t("shifts.avoid")}</span>
+          <span style={{ fontSize: 11.5, fontWeight: 700, color: G.green700 }}>{rideWindows.length} {t("shifts.ride")}{avoidWindow ? ` · 1 ${t("shifts.avoid")}` : ""}</span>
         </div>
-        {rideWindows.map((w, i) => <WindowCard key={i} w={w} idx={i} isAvoid={false} active={isWindowActive(w, now)} />)}
-        {avoidWindow && <WindowCard w={avoidWindow} idx={0} isAvoid active={isWindowActive(avoidWindow, now)} />}
-      </div>
-
-      {/* Earnings chart */}
-      <div style={{ padding: "6px 20px 0" }}>
-        <div style={{ fontWeight: 700, fontSize: 12, letterSpacing: ".7px", textTransform: "uppercase", color: G.faint, marginBottom: 12 }}>{t("shifts.earningsOutlook")}</div>
-        <EarningsChart curve={curve} />
-        <Link href="/earnings" style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 7, marginTop: 12, height: 48, borderRadius: 14, background: G.surface, border: `1.5px solid ${G.green}`, color: G.green700, fontWeight: 700, fontSize: 14, textDecoration: "none" }}>
-          <Wallet size={17} /> {t("earn.open")}
-        </Link>
+        {rideWindows.map((w, i) => <WindowCard key={i} w={w} idx={i} isAvoid={false} active={isWindowActive(w, now)} spots={spots} area={area} profId={profile.profession} />)}
+        {avoidWindow && <WindowCard w={avoidWindow} idx={0} isAvoid active={isWindowActive(avoidWindow, now)} spots={spots} area={area} profId={profile.profession} />}
       </div>
     </div>
   );
