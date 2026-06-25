@@ -110,9 +110,19 @@ export const ZONES: Zone[] = [
 ];
 
 export function detectZone(lat: number, lon: number): Zone | null {
-  return ZONES.find(
+  const inside = ZONES.find(
     (z) => lat >= z.lat[0] && lat <= z.lat[1] && lon >= z.lon[0] && lon <= z.lon[1]
-  ) ?? null;
+  );
+  if (inside) return inside;
+  // Just outside every rectangle (the bounds are tight) — snap to the nearest
+  // zone centre if it's within ~20 km, so riders still get a real local plan.
+  let best: Zone | null = null, bestD = Infinity;
+  for (const z of ZONES) {
+    const cy = (z.lat[0] + z.lat[1]) / 2, cx = (z.lon[0] + z.lon[1]) / 2;
+    const d = Math.hypot(lat - cy, lon - cx);
+    if (d < bestD) { bestD = d; best = z; }
+  }
+  return bestD < 0.18 ? best : null;
 }
 
 // ── Shift windows — profession-specific playbooks ─────────────

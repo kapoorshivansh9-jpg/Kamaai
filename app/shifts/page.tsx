@@ -63,6 +63,91 @@ function spotsForWindow(prof: string, windowId: string, spots: Spot[]): Spot[] {
   return matched.length ? matched : spots; // keep differentiation when possible, else show what's near
 }
 
+// Sub-areas WITHIN each broad zone, so the plan names "Sector 18", not "Noida".
+// Each is tagged with the activity it suits; we pick DIFFERENT ones per window
+// (offices at lunch, homes at dinner, nightlife late) → time-optimised + local.
+type Vibe = "office" | "residential" | "market" | "metro" | "nightlife" | "food";
+type SubArea = { name: string; lat: number; lon: number; vibes: Vibe[] };
+const SUBAREAS: Record<string, SubArea[]> = {
+  cp: [
+    { name: "Connaught Place (Inner Circle)", lat: 28.6328, lon: 77.2197, vibes: ["food", "market", "office", "nightlife", "metro"] },
+    { name: "Barakhamba Road", lat: 28.6300, lon: 77.2250, vibes: ["office", "metro"] },
+    { name: "Karol Bagh", lat: 28.6510, lon: 77.1900, vibes: ["market", "food", "residential"] },
+    { name: "Paharganj / New Delhi Stn", lat: 28.6450, lon: 77.2120, vibes: ["metro", "food", "residential"] },
+    { name: "Gole Market homes", lat: 28.6280, lon: 77.2010, vibes: ["residential"] },
+  ],
+  noida: [
+    { name: "Sector 18 (Atta Market)", lat: 28.5705, lon: 77.3210, vibes: ["market", "food", "nightlife", "metro"] },
+    { name: "Sector 62 IT parks", lat: 28.6270, lon: 77.3640, vibes: ["office", "food"] },
+    { name: "Sector 15/16 offices", lat: 28.5790, lon: 77.3120, vibes: ["office", "metro"] },
+    { name: "Sector 50–78 societies", lat: 28.5760, lon: 77.3600, vibes: ["residential"] },
+    { name: "Sector 137 / Expressway", lat: 28.4980, lon: 77.4090, vibes: ["office", "residential"] },
+  ],
+  gurgaon: [
+    { name: "Cyber City / Cyber Hub", lat: 28.4940, lon: 77.0880, vibes: ["office", "food", "nightlife"] },
+    { name: "Sector 29 (bars)", lat: 28.4660, lon: 77.0620, vibes: ["nightlife", "food", "market"] },
+    { name: "DLF Phase 1–5", lat: 28.4720, lon: 77.0950, vibes: ["residential"] },
+    { name: "MG Road / Sikanderpur", lat: 28.4790, lon: 77.0800, vibes: ["metro", "market", "nightlife"] },
+    { name: "Sohna Road societies", lat: 28.4180, lon: 77.0370, vibes: ["residential", "food"] },
+  ],
+  rohini: [
+    { name: "Rohini Sector 3 Market", lat: 28.7150, lon: 77.1140, vibes: ["market", "food"] },
+    { name: "Netaji Subhash Place", lat: 28.6960, lon: 77.1520, vibes: ["office", "metro", "food"] },
+    { name: "Rohini West Metro", lat: 28.7140, lon: 77.1080, vibes: ["metro", "residential"] },
+    { name: "Pitampura (TV Tower)", lat: 28.7030, lon: 77.1310, vibes: ["market", "residential"] },
+    { name: "Sector 7–13 flats", lat: 28.7050, lon: 77.1000, vibes: ["residential"] },
+  ],
+  dwarka: [
+    { name: "Sector 6 Market", lat: 28.5920, lon: 77.0460, vibes: ["market", "food"] },
+    { name: "Vegas Mall (Sector 14)", lat: 28.5980, lon: 77.0590, vibes: ["market", "food", "nightlife"] },
+    { name: "Dwarka Sector 21 Metro", lat: 28.5520, lon: 77.0580, vibes: ["metro"] },
+    { name: "Sector 10–14 societies", lat: 28.5870, lon: 77.0550, vibes: ["residential"] },
+    { name: "Dwarka Expressway offices", lat: 28.5050, lon: 77.0610, vibes: ["office", "residential"] },
+  ],
+  saket: [
+    { name: "Select Citywalk / Saket", lat: 28.5280, lon: 77.2190, vibes: ["market", "food", "nightlife"] },
+    { name: "Hauz Khas Village", lat: 28.5530, lon: 77.1940, vibes: ["nightlife", "food"] },
+    { name: "Malviya Nagar", lat: 28.5350, lon: 77.2060, vibes: ["market", "food", "residential"] },
+    { name: "Saket Metro / District Centre", lat: 28.5240, lon: 77.2050, vibes: ["metro", "office"] },
+    { name: "Saidulajab homes", lat: 28.5160, lon: 77.1990, vibes: ["residential"] },
+  ],
+  lajpat: [
+    { name: "Lajpat Nagar Central Market", lat: 28.5680, lon: 77.2430, vibes: ["market", "food"] },
+    { name: "Nehru Place", lat: 28.5490, lon: 77.2510, vibes: ["office", "food", "market"] },
+    { name: "Defence Colony", lat: 28.5730, lon: 77.2300, vibes: ["food", "nightlife", "residential"] },
+    { name: "Lajpat Nagar Metro", lat: 28.5700, lon: 77.2360, vibes: ["metro"] },
+    { name: "Nizamuddin homes", lat: 28.5910, lon: 77.2440, vibes: ["residential"] },
+  ],
+};
+
+// Which sub-area "vibes" each window wants — this is what makes the recommended
+// areas change through the day.
+const WINDOW_VIBES: Record<string, Record<string, Vibe[]>> = {
+  food: { breakfast: ["food", "residential"], "mid-morning": ["food", "market"], lunch: ["office", "food"], afternoon: ["market", "food"], dinner: ["residential", "food", "nightlife"], late: ["nightlife", "food"] },
+  qcom: { "morning-grocery": ["residential"], midday: ["residential"], "pre-evening": ["residential", "market"], evening: ["residential", "market"], late: ["residential", "nightlife"] },
+  cab: { "airport-early": ["office", "residential"], "office-am": ["office"], "mid-morning": ["market", "office"], midday: ["market", "office"], "pre-evening": ["office", "market"], "office-pm": ["office", "nightlife"], night: ["nightlife"] },
+  auto: { "morning-feeder": ["metro", "office"], "mid-morning": ["market", "metro"], midday: ["market"], afternoon: ["market", "metro"], "evening-feeder": ["metro", "residential"], night: ["market", "nightlife"] },
+  biketx: { morning: ["metro", "office"], midday: ["market"], afternoon: ["market", "metro"], evening: ["metro", "office"], night: ["nightlife", "metro"] },
+};
+
+function haversineKm(aLat: number, aLon: number, bLat: number, bLon: number): number {
+  const R = 6371, dLat = ((bLat - aLat) * Math.PI) / 180, dLon = ((bLon - aLon) * Math.PI) / 180;
+  const s = Math.sin(dLat / 2) ** 2 + Math.cos((aLat * Math.PI) / 180) * Math.cos((bLat * Math.PI) / 180) * Math.sin(dLon / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(s), Math.sqrt(1 - s));
+}
+
+/** Nearest time-appropriate sub-areas to the rider (across all zones, ≤8 km). */
+function subAreasFor(coords: { lat: number; lon: number } | null, prof: string, windowId: string): SubArea[] {
+  if (!coords) return [];
+  const vibes = WINDOW_VIBES[prof]?.[windowId] ?? [];
+  const withD = Object.values(SUBAREAS).flat()
+    .map((sa) => ({ sa, d: haversineKm(coords.lat, coords.lon, sa.lat, sa.lon) }))
+    .filter((x) => x.d <= 8)
+    .sort((a, b) => a.d - b.d);
+  const matched = withD.filter((x) => x.sa.vibes.some((v) => vibes.includes(v)));
+  return (matched.length >= 2 ? matched : withD).slice(0, 6).map((x) => x.sa);
+}
+
 function SpotRow({ href, title, sub }: { href: string; title: string; sub: string }) {
   return (
     <a href={href} target="_blank" rel="noopener noreferrer"
@@ -204,18 +289,32 @@ function DetailPanel({ d, reason, tag, areas, spots, windowId, fb, isMidday }: {
   );
 }
 
-function WindowCard({ w, idx, isAvoid, active, spots, areas, areaName, profId, fb }: { w: ShiftWindow; idx: number; isAvoid: boolean; active?: boolean; spots: Spot[]; areas: Area[]; areaName: string; profId: string; fb: Feedback }) {
+function WindowCard({ w, idx, isAvoid, active, spots, areas, areaName, zoneId, coords, profId, fb }: { w: ShiftWindow; idx: number; isAvoid: boolean; active?: boolean; spots: Spot[]; areas: Area[]; areaName: string; zoneId: string | null; coords: { lat: number; lon: number } | null; profId: string; fb: Feedback }) {
   const [open, setOpen] = useState((idx === 0 || !!active) && !isAvoid);
   const tag = TAG[w.tag];
   const t = useT();
   const winSpots = spotsForWindow(profId, w.id, spots);
   const kinds = WINDOW_KINDS[profId]?.[w.id] ?? null;
-  let winAreas = areas
-    .map((a) => ({ name: a.name, distKm: a.distKm, spots: (kinds ? a.spots.filter((s) => kinds.includes(s.kind)) : a.spots).slice(0, 3) }))
-    .filter((a) => a.spots.length > 0)
-    .slice(0, 3);
-  // When OSM has no neighbourhood tags nearby, group the live places under the
-  // rider's own area so the "area → places" structure still shows.
+  const matchKind = (s: Spot) => !kinds || kinds.includes(s.kind);
+
+  // Primary: curated sub-areas for THIS zone + window (change through the day),
+  // with the live places nested by proximity (within ~2.5 km of the sub-area).
+  let winAreas: { name: string; distKm: number; spots: Spot[] }[] = subAreasFor(coords, profId, w.id).map((sa) => ({
+    name: sa.name,
+    distKm: coords ? Math.round(haversineKm(coords.lat, coords.lon, sa.lat, sa.lon) * 10) / 10 : 0,
+    spots: coords
+      ? spots.filter(matchKind)
+          .map((s) => ({ s, d: haversineKm(sa.lat, sa.lon, s.lat, s.lon) }))
+          .filter((x) => x.d <= 2.5).sort((a, b) => a.d - b.d).slice(0, 3).map((x) => x.s)
+      : [],
+  }));
+  if (coords && winAreas.length) winAreas = winAreas.sort((a, b) => a.distKm - b.distKm).filter((a, i) => a.distKm <= 6 || i < 2);
+  winAreas = winAreas.slice(0, 3);
+
+  // Fallbacks (rider outside the known zones): OSM neighbourhoods, then their area.
+  if (winAreas.length === 0) {
+    winAreas = areas.map((a) => ({ name: a.name, distKm: a.distKm, spots: (kinds ? a.spots.filter(matchKind) : a.spots).slice(0, 3) })).filter((a) => a.spots.length > 0).slice(0, 3);
+  }
   if (winAreas.length === 0 && winSpots.length > 0) {
     winAreas = [{ name: areaName, distKm: 0, spots: winSpots.slice(0, 4) }];
   }
@@ -488,8 +587,8 @@ export default function ShiftsPage() {
           <span style={{ fontWeight: 700, fontSize: 12, letterSpacing: ".7px", textTransform: "uppercase", color: G.faint }}>{t("shifts.allWindows")}</span>
           <span style={{ fontSize: 11.5, fontWeight: 700, color: G.green700 }}>{rideWindows.length} {t("shifts.ride")}{avoidWindow ? ` · 1 ${t("shifts.avoid")}` : ""}</span>
         </div>
-        {rideWindows.map((w, i) => <WindowCard key={i} w={w} idx={i} isAvoid={false} active={isWindowActive(w, now)} spots={spots} areas={areas} areaName={areaLabel} profId={profile.profession} fb={feedback} />)}
-        {avoidWindow && <WindowCard w={avoidWindow} idx={0} isAvoid active={isWindowActive(avoidWindow, now)} spots={spots} areas={areas} areaName={areaLabel} profId={profile.profession} fb={feedback} />}
+        {rideWindows.map((w, i) => <WindowCard key={i} w={w} idx={i} isAvoid={false} active={isWindowActive(w, now)} spots={spots} areas={areas} areaName={areaLabel} zoneId={zone?.id ?? null} coords={coords} profId={profile.profession} fb={feedback} />)}
+        {avoidWindow && <WindowCard w={avoidWindow} idx={0} isAvoid active={isWindowActive(avoidWindow, now)} spots={spots} areas={areas} areaName={areaLabel} zoneId={zone?.id ?? null} coords={coords} profId={profile.profession} fb={feedback} />}
       </div>
     </div>
   );
