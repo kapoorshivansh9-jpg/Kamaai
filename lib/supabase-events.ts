@@ -97,6 +97,48 @@ export async function addWaterPoint(lat: number, lon: number, name: string, cate
   }
 }
 
+// ── Crowdsourced "was this zone busy?" feedback ───────────────
+export interface ZoneStat { busy: number; quiet: number; score: number } // score 0–1
+
+/** Records a rider's busy/quiet vote for a strategic zone. Best-effort. */
+export async function submitSpotFeedback(f: { zone: string; profession: string; windowId: string; busy: boolean }): Promise<boolean> {
+  const db = getClient();
+  if (!db) return false;
+  try {
+    const { error } = await db.from("spot_feedback").insert({
+      zone: f.zone, profession: f.profession, window_id: f.windowId, busy: f.busy,
+    });
+    return !error;
+  } catch {
+    return false;
+  }
+}
+
+/** Aggregated busy/quiet votes per zone for a profession (last 21 days), or null. */
+export async function fetchZoneStats(profession: string): Promise<Record<string, ZoneStat> | null> {
+  const db = getClient();
+  if (!db) return null;
+  const since = new Date(Date.now() - 21 * 24 * 60 * 60 * 1000).toISOString();
+  try {
+    const { data, error } = await db
+      .from("spot_feedback")
+      .select("zone,busy")
+      .eq("profession", profession)
+      .gte("created_at", since)
+      .limit(2000);
+    if (error || !data) return null;
+    const out: Record<string, ZoneStat> = {};
+    for (const r of data as { zone: string; busy: boolean }[]) {
+      const s = (out[r.zone] ??= { busy: 0, quiet: 0, score: 0 });
+      if (r.busy) s.busy++; else s.quiet++;
+    }
+    for (const s of Object.values(out)) s.score = s.busy / Math.max(1, s.busy + s.quiet);
+    return out;
+  } catch {
+    return null;
+  }
+}
+
 export async function saveProfile(profile: RideKamaoProfile) {
   const db = getClient();
   if (!db || !profile.email) return;

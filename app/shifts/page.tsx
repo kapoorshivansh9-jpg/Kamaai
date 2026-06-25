@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { MapPin, AlertTriangle, TrendingUp, Clock, Target, Zap, Navigation, Lightbulb, ChevronDown } from "lucide-react";
 import { useProfile } from "@/lib/ridekamao-profile";
 import { windowsFor, detectZone, isWindowActive } from "@/lib/ridekamao-data";
-import { trackEvent } from "@/lib/supabase-events";
+import { trackEvent, submitSpotFeedback, fetchZoneStats, type ZoneStat } from "@/lib/supabase-events";
 import { useT, useLang, profTitle, localeTag } from "@/lib/i18n";
 import type { ShiftWindow, Zone } from "@/lib/ridekamao-data";
 
@@ -94,11 +94,45 @@ function SpotRow({ href, title, sub }: { href: string; title: string; sub: strin
   );
 }
 
+type Feedback = { stats: Record<string, ZoneStat> | null; voted: Set<string>; vote: (zone: string, windowId: string, busy: boolean) => void };
+
+function ZoneRow({ zone, windowId, fb }: { zone: string; windowId: string; fb: Feedback }) {
+  const t = useT();
+  const stat = fb.stats?.[zone];
+  const votes = stat ? stat.busy + stat.quiet : 0;
+  const voted = fb.voted.has(zone);
+  const badge = votes > 0
+    ? `${stat!.score >= 0.6 ? "🔥 " + t("fb.usuallyBusy") : stat!.score <= 0.4 ? t("fb.oftenQuiet") : t("fb.mixed")} · ${votes}`
+    : t("d.busyZone");
+  const voteBtn = (bg: string) => ({ width: 30, height: 30, borderRadius: 9, border: `1px solid ${G.line}`, background: bg, fontSize: 14, lineHeight: 1, cursor: "pointer", flexShrink: 0, display: "flex" as const, alignItems: "center", justifyContent: "center" });
+  return (
+    <div style={{ display: "flex", gap: 8, alignItems: "center", padding: "9px 11px", borderRadius: 11, background: G.surface, border: `1px solid ${G.line}` }}>
+      <a href={searchUrl(zone)} target="_blank" rel="noopener noreferrer" style={{ display: "flex", gap: 10, alignItems: "center", flex: 1, minWidth: 0, textDecoration: "none" }}>
+        <div style={{ width: 26, height: 26, borderRadius: 8, flexShrink: 0, background: G.green50, display: "flex", alignItems: "center", justifyContent: "center" }}>
+          <MapPin size={14} color={G.green700} />
+        </div>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontSize: 13, fontWeight: 700, color: G.ink, lineHeight: 1.25, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{zone}</div>
+          <div style={{ fontSize: 11, color: votes > 0 && stat!.score >= 0.6 ? G.green700 : G.muted, marginTop: 2, lineHeight: 1.4, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{badge}</div>
+        </div>
+      </a>
+      {voted ? (
+        <span style={{ fontSize: 11, fontWeight: 800, color: G.green700, flexShrink: 0 }}>✓ {t("fb.thanks")}</span>
+      ) : (
+        <>
+          <button onClick={() => fb.vote(zone, windowId, true)} aria-label={t("fb.yes")} title={t("fb.yes")} style={voteBtn(G.green50)}>👍</button>
+          <button onClick={() => fb.vote(zone, windowId, false)} aria-label={t("fb.no")} title={t("fb.no")} style={voteBtn(G.bg)}>👎</button>
+        </>
+      )}
+    </div>
+  );
+}
+
 function GroupLabel({ children }: { children: string }) {
   return <div style={{ fontSize: 9.5, fontWeight: 800, letterSpacing: ".7px", textTransform: "uppercase", color: G.faint, marginBottom: 8 }}>{children}</div>;
 }
 
-function DetailPanel({ d, tag, spots, area, cityZones }: { d: ShiftWindow["detail"]; tag: typeof TAG[keyof typeof TAG]; spots: Spot[]; area: string; cityZones: string[] }) {
+function DetailPanel({ d, tag, spots, cityZones, windowId, fb }: { d: ShiftWindow["detail"]; tag: typeof TAG[keyof typeof TAG]; spots: Spot[]; cityZones: string[]; windowId: string; fb: Feedback }) {
   const t = useT();
   const live = spots.slice(0, 5);
   return (
@@ -112,10 +146,10 @@ function DetailPanel({ d, tag, spots, area, cityZones }: { d: ShiftWindow["detai
         </div>
       </div>
 
-      {/* Busy zones to aim for — curated, can be across the city (tap = Maps) */}
+      {/* Busy zones to aim for — curated (can be far) + rider busy/quiet votes */}
       <GroupLabel>{t("d.cityZones")}</GroupLabel>
       <div style={{ display: "flex", flexDirection: "column", gap: 7, marginBottom: 14 }}>
-        {cityZones.map((z, i) => <SpotRow key={i} href={searchUrl(z)} title={z} sub={t("d.busyZone")} />)}
+        {cityZones.map((z, i) => <ZoneRow key={i} zone={z} windowId={windowId} fb={fb} />)}
       </div>
 
       {/* Real places near you — live from OpenStreetMap (tap = directions) */}
@@ -137,7 +171,7 @@ function DetailPanel({ d, tag, spots, area, cityZones }: { d: ShiftWindow["detai
   );
 }
 
-function WindowCard({ w, idx, isAvoid, active, spots, area, profId }: { w: ShiftWindow; idx: number; isAvoid: boolean; active?: boolean; spots: Spot[]; area: string; profId: string }) {
+function WindowCard({ w, idx, isAvoid, active, spots, profId, fb }: { w: ShiftWindow; idx: number; isAvoid: boolean; active?: boolean; spots: Spot[]; profId: string; fb: Feedback }) {
   const [open, setOpen] = useState((idx === 0 || !!active) && !isAvoid);
   const tag = TAG[w.tag];
   const t = useT();
@@ -219,7 +253,7 @@ function WindowCard({ w, idx, isAvoid, active, spots, area, profId }: { w: Shift
         </button>
       )}
 
-      {open && <DetailPanel d={w.detail} tag={tag} spots={winSpots} area={area} cityZones={cityZones} />}
+      {open && <DetailPanel d={w.detail} tag={tag} spots={winSpots} cityZones={cityZones} windowId={w.id} fb={fb} />}
     </div>
   );
 }
@@ -233,6 +267,8 @@ export default function ShiftsPage() {
   const [coords, setCoords] = useState<{ lat: number; lon: number } | null>(null);
   const [spots, setSpots] = useState<Spot[]>([]);
   const [traffic, setTraffic] = useState<{ level: "light" | "moderate" | "heavy" } | null>(null);
+  const [zoneStats, setZoneStats] = useState<Record<string, ZoneStat> | null>(null);
+  const [voted, setVoted] = useState<Set<string>>(new Set());
   const [locationStatus, setLocationStatus] = useState<"idle" | "requesting" | "granted" | "denied">("idle");
 
   useEffect(() => {
@@ -257,6 +293,19 @@ export default function ShiftsPage() {
     }
   }, [profile]);
 
+  // Load this rider's past votes (one vote per zone, per device).
+  useEffect(() => {
+    try { const v = JSON.parse(localStorage.getItem("rk-spot-votes") || "[]"); if (Array.isArray(v)) setVoted(new Set(v)); } catch { /* ignore */ }
+  }, []);
+
+  // Crowdsourced busy/quiet stats for this gig type (null until Supabase table exists).
+  useEffect(() => {
+    if (!profile) return;
+    let cancelled = false;
+    fetchZoneStats(profile.profession).then((s) => { if (!cancelled && s) setZoneStats(s); });
+    return () => { cancelled = true; };
+  }, [profile]);
+
   // Pull real nearby places for THIS gig type from OpenStreetMap (/api/hotspots).
   useEffect(() => {
     if (!profile || !coords) return;
@@ -279,7 +328,22 @@ export default function ShiftsPage() {
   const allWindows = windowsFor(profile.profession, zone, now, lang);
   const avoidWindow = allWindows.find((w) => w.tag === "avoid");
   const rideWindows = allWindows.filter((w) => w.tag !== "avoid");
-  const area = zone ? zone.label : t("common.ncr");
+  const vote = (zone: string, windowId: string, busy: boolean) => {
+    setVoted((prev) => {
+      const n = new Set(prev); n.add(zone);
+      try { localStorage.setItem("rk-spot-votes", JSON.stringify([...n])); } catch { /* ignore */ }
+      return n;
+    });
+    setZoneStats((prev) => {
+      const next = { ...(prev ?? {}) };
+      const s = next[zone] ? { ...next[zone] } : { busy: 0, quiet: 0, score: 0 };
+      if (busy) s.busy++; else s.quiet++;
+      s.score = s.busy / Math.max(1, s.busy + s.quiet);
+      next[zone] = s; return next;
+    });
+    submitSpotFeedback({ zone, profession: profile.profession, windowId, busy });
+  };
+  const feedback: Feedback = { stats: zoneStats, voted, vote };
 
   const dateStr = now.toLocaleDateString(localeTag(lang), { weekday: "long", day: "numeric", month: "long" });
 
@@ -375,8 +439,8 @@ export default function ShiftsPage() {
           <span style={{ fontWeight: 700, fontSize: 12, letterSpacing: ".7px", textTransform: "uppercase", color: G.faint }}>{t("shifts.allWindows")}</span>
           <span style={{ fontSize: 11.5, fontWeight: 700, color: G.green700 }}>{rideWindows.length} {t("shifts.ride")}{avoidWindow ? ` · 1 ${t("shifts.avoid")}` : ""}</span>
         </div>
-        {rideWindows.map((w, i) => <WindowCard key={i} w={w} idx={i} isAvoid={false} active={isWindowActive(w, now)} spots={spots} area={area} profId={profile.profession} />)}
-        {avoidWindow && <WindowCard w={avoidWindow} idx={0} isAvoid active={isWindowActive(avoidWindow, now)} spots={spots} area={area} profId={profile.profession} />}
+        {rideWindows.map((w, i) => <WindowCard key={i} w={w} idx={i} isAvoid={false} active={isWindowActive(w, now)} spots={spots} profId={profile.profession} fb={feedback} />)}
+        {avoidWindow && <WindowCard w={avoidWindow} idx={0} isAvoid active={isWindowActive(avoidWindow, now)} spots={spots} profId={profile.profession} fb={feedback} />}
       </div>
     </div>
   );
