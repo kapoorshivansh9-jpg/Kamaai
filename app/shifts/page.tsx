@@ -418,22 +418,26 @@ export default function ShiftsPage() {
     if (!loading && !profile) router.push("/onboarding");
   }, [loading, profile]);
 
+  // Ask for location — callable on mount AND from the "Enable location" button.
+  const askLocation = () => {
+    if (!("geolocation" in navigator)) { setLocationStatus("denied"); return; }
+    setLocationStatus("requesting");
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        const lat = pos.coords.latitude, lon = pos.coords.longitude;
+        setZone(detectZone(lat, lon));
+        setCoords({ lat: Math.round(lat * 100) / 100, lon: Math.round(lon * 100) / 100 });
+        setLocationStatus("granted");
+      },
+      () => setLocationStatus("denied"),
+      { timeout: 10000, maximumAge: 300000, enableHighAccuracy: false }
+    );
+  };
+
   useEffect(() => {
     if (!profile) return;
     trackEvent({ type: "shift_plan_viewed", profession: profile.profession, language: profile.language });
-    if ("geolocation" in navigator) {
-      setLocationStatus("requesting");
-      navigator.geolocation.getCurrentPosition(
-        (pos) => {
-          const lat = pos.coords.latitude, lon = pos.coords.longitude;
-          setZone(detectZone(lat, lon));
-          setCoords({ lat: Math.round(lat * 100) / 100, lon: Math.round(lon * 100) / 100 });
-          setLocationStatus("granted");
-        },
-        () => setLocationStatus("denied"),
-        { timeout: 6000, maximumAge: 300000 }
-      );
-    }
+    askLocation();
   }, [profile]);
 
   // Load this rider's past votes (one vote per zone, per device).
@@ -578,6 +582,20 @@ export default function ShiftsPage() {
           <span style={{ fontSize: 12.5, fontWeight: 600, color: G.green700 }}>
             {t("shifts.showingSurge")} <strong>{zone.label}</strong>
           </span>
+        </div>
+      )}
+
+      {/* Location prompt — without it the plan is generic */}
+      {locationStatus !== "granted" && (
+        <div style={{ margin: "14px 20px 0", padding: "12px 14px", borderRadius: 14, background: G.amberBg, border: "1px solid rgba(201,110,0,.25)", display: "flex", alignItems: "center", gap: 11 }}>
+          <MapPin size={18} color={G.amber} style={{ flexShrink: 0 }} />
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: 13, fontWeight: 800, color: G.amberInk, lineHeight: 1.2 }}>{t("loc.promptTitle")}</div>
+            <div style={{ fontSize: 11.5, color: G.amberInk, opacity: 0.85, marginTop: 2, lineHeight: 1.35 }}>{t("loc.promptSub")}</div>
+          </div>
+          <button onClick={askLocation} disabled={locationStatus === "requesting"} style={{ flexShrink: 0, padding: "9px 13px", borderRadius: 10, border: "none", background: "linear-gradient(180deg,#0B6B48,#064D33)", color: "#fff", fontWeight: 700, fontSize: 12.5, cursor: "pointer" }}>
+            {locationStatus === "requesting" ? t("loc.locating") : t("loc.enable")}
+          </button>
         </div>
       )}
 

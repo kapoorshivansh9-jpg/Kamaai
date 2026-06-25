@@ -45,6 +45,7 @@ const en = {
   // shifts
   "shifts.title": "Shift Planner",
   "loc.locating": "Locating…", "loc.located": "Located", "loc.ncr": "Delhi NCR",
+  "loc.promptTitle": "Turn on location", "loc.promptSub": "Get area-level picks and real places near you — without it the plan stays generic.", "loc.enable": "Enable",
   "shifts.top3": "Today's top 3 windows", "shifts.projected": "projected",
   "shifts.workWindow": "Work window", "shifts.hrs": "hrs", "shifts.vsUsual": "vs usual",
   "shifts.showingSurge": "Showing surge data for",
@@ -137,6 +138,7 @@ const hi: Record<Key, string> = {
 
   "shifts.title": "शिफ्ट प्लानर",
   "loc.locating": "ढूँढ रहे हैं…", "loc.located": "मिल गया", "loc.ncr": "दिल्ली NCR",
+  "loc.promptTitle": "लोकेशन चालू करें", "loc.promptSub": "अपने पास के इलाके व असली जगहें पाएँ — इसके बिना प्लान सामान्य रहता है।", "loc.enable": "चालू करें",
   "shifts.top3": "आज की टॉप 3 विंडो", "shifts.projected": "अनुमानित",
   "shifts.workWindow": "काम का समय", "shifts.hrs": "घंटे", "shifts.vsUsual": "आम दिन से",
   "shifts.showingSurge": "सर्ज डेटा दिखा रहे हैं —",

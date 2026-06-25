@@ -78,6 +78,10 @@
   * { @apply border-border outline-ring/50; }
   body { background: var(--rk-bg); color: var(--rk-ink); }
   html { @apply font-sans; }
+  /* Never let a stray wide element push the page sideways on a phone. */
+  html, body { max-width: 100%; overflow-x: hidden; }
+  /* Anything that sets an explicit width still can't exceed the screen. */
+  img, svg, video, canvas { max-width: 100%; }
 }
 
 /* Utilities */
@@ -121,4 +125,8 @@
 @keyframes rk-fadeIn {
   from { opacity: 0; }
   to   { opacity: 1; }
+}
+@keyframes rk-centerPop {
+  from { transform: translate(-50%, -50%) scale(.95); opacity: 0; }
+  to   { transform: translate(-50%, -50%) scale(1);   opacity: 1; }
 }

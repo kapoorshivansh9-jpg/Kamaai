@@ -76,21 +76,15 @@ export function ProfileSheet() {
         style={{ position: "fixed", inset: 0, zIndex: 50, background: "rgba(5,22,14,.55)", animation: "rk-fadeIn .2s both" }}
       />
 
-      {/* Sheet */}
+      {/* Centered modal */}
       <div style={{
-        position: "fixed", bottom: 0, left: "50%", transform: "translateX(-50%)",
-        width: "100%", maxWidth: 480, zIndex: 51,
-        background: G.surface, borderRadius: "24px 24px 0 0",
-        boxShadow: "0 -8px 40px -8px rgba(5,22,14,.25)",
-        animation: "rk-slideUp .28s cubic-bezier(.34,1.3,.64,1) both",
-        paddingBottom: "env(safe-area-inset-bottom)",
-        maxHeight: "92dvh", overflowY: "auto",
+        position: "fixed", top: "50%", left: "50%", transform: "translate(-50%, -50%)",
+        width: "calc(100% - 28px)", maxWidth: 420, zIndex: 51,
+        background: G.surface, borderRadius: 24,
+        boxShadow: "0 24px 70px -12px rgba(5,22,14,.45)",
+        animation: "rk-centerPop .22s cubic-bezier(.34,1.3,.64,1) both",
+        maxHeight: "86dvh", overflowY: "auto",
       }}>
-        {/* Handle */}
-        <div style={{ display: "flex", justifyContent: "center", paddingTop: 12 }}>
-          <div style={{ width: 40, height: 4, borderRadius: 2, background: G.line }} />
-        </div>
-
         {/* Header */}
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 20px 10px" }}>
           <h2 style={{ margin: 0, fontWeight: 800, fontSize: 20, color: G.ink }}>
