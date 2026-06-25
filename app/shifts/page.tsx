@@ -335,18 +335,25 @@ function WindowCard({ w, idx, isAvoid, active, spots, areas, areaName, zoneId, c
   const kinds = WINDOW_KINDS[profId]?.[w.id] ?? null;
   const matchKind = (s: Spot) => !kinds || kinds.includes(s.kind);
 
-  // Curated sub-areas for THIS zone + window (change through the day), each with
-  // the real nearby places (within ~4 km) nested inside. Only keep areas that
-  // actually have specific spots, so the rider never sees a bare area name.
-  let winAreas: Area[] = subAreasFor(coords, profId, w.id)
+  // Candidate sub-areas for THIS zone + window, de-duplicated so two near-identical
+  // places (e.g. Film City & Sector 18, ~1 km apart) never both appear.
+  const matched = coords ? spots.filter(matchKind) : [];
+  const candidates: SubArea[] = [];
+  for (const sa of subAreasFor(coords, profId, w.id)) {
+    if (candidates.every((c) => haversineKm(c.lat, c.lon, sa.lat, sa.lon) > 1.5)) candidates.push(sa);
+  }
+  // Each real place belongs to its SINGLE nearest area — so areas never share spots.
+  const bucket: Record<string, Spot[]> = {};
+  for (const s of matched) {
+    let best: SubArea | null = null, bestD = Infinity;
+    for (const c of candidates) { const d = haversineKm(c.lat, c.lon, s.lat, s.lon); if (d < bestD) { bestD = d; best = c; } }
+    if (best && bestD <= 4) (bucket[best.name] ??= []).push(s);
+  }
+  let winAreas: Area[] = candidates
     .map((sa) => ({
       name: sa.name,
       distKm: coords ? Math.round(haversineKm(coords.lat, coords.lon, sa.lat, sa.lon) * 10) / 10 : 0,
-      spots: coords
-        ? spots.filter(matchKind)
-            .map((s) => ({ s, d: haversineKm(sa.lat, sa.lon, s.lat, s.lon) }))
-            .filter((x) => x.d <= 4).sort((a, b) => a.d - b.d).slice(0, 5).map((x) => x.s)
-        : [],
+      spots: (bucket[sa.name] ?? []).sort((a, b) => a.distKm - b.distKm).slice(0, 5),
     }))
     .filter((a) => a.spots.length > 0)
     .sort((a, b) => a.distKm - b.distKm)
