@@ -136,7 +136,7 @@ async function fetchSpots(lat: number, lon: number, prof: string): Promise<Spot[
       }, [])
       // Best-quality first, nearest as the tie-breaker.
       .sort((a, b) => b.score - a.score || a.distKm - b.distKm)
-      .slice(0, 30);
+      .slice(0, 60);
   } catch {
     return [];
   } finally {
