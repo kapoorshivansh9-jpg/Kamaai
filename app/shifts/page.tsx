@@ -136,6 +136,55 @@ function haversineKm(aLat: number, aLon: number, bLat: number, bLon: number): nu
   return R * 2 * Math.atan2(Math.sqrt(s), Math.sqrt(1 - s));
 }
 
+// What to stand near, by job + time of day — concrete, named, and DIFFERENT each
+// window (breakfast joints in the morning; pizza/fast food like Domino's at
+// night). Grounded in real Indian demand: dinner 7–11 PM is the biggest peak.
+const WINDOW_LOOK: Record<string, Record<string, [string, string]>> = {
+  food: {
+    breakfast: ["Breakfast joints, tea stalls & cafés — paratha, idli-dosa, chai, coffee", "नाश्ता जॉइंट, चाय की दुकानें व कैफ़े — पराठा, इडली-डोसा, चाय, कॉफ़ी"],
+    "mid-morning": ["Cafés & bakeries — coffee, sandwiches, brunch", "कैफ़े व बेकरी — कॉफ़ी, सैंडविच, ब्रंच"],
+    lunch: ["Office lunch spots — thali, biryani, meals & cloud kitchens", "ऑफिस लंच — थाली, बिरयानी, मील व क्लाउड किचन"],
+    afternoon: ["Cafés, ice-cream & dessert — snacks, shakes, sweets", "कैफ़े, आइसक्रीम व मिठाई — स्नैक, शेक"],
+    dinner: ["Restaurants, pizza & fast food — Domino's, biryani, McDonald's, KFC", "रेस्तराँ, पिज़्ज़ा व फास्ट फूड — Domino's, बिरयानी, McDonald's, KFC"],
+    late: ["Late-night pizza & fast food — Domino's, McD, 24×7 dhabas", "देर रात पिज़्ज़ा व फास्ट फूड — Domino's, McD, 24×7 ढाबे"],
+  },
+  qcom: {
+    "morning-grocery": ["Homes ordering milk, bread, eggs & vegetables", "घर — दूध, ब्रेड, अंडे व सब्ज़ी"],
+    midday: ["Cold drinks, ice-cream, snacks & quick essentials", "कोल्ड ड्रिंक, आइसक्रीम, स्नैक व ज़रूरी सामान"],
+    "pre-evening": ["Tea-time snacks, namkeen & grocery top-ups", "चाय-टाइम स्नैक, नमकीन व ग्रोसरी टॉप-अप"],
+    evening: ["Dinner groceries — vegetables, dairy & atta", "डिनर ग्रोसरी — सब्ज़ी, डेयरी व आटा"],
+    late: ["Medicines, late-night snacks & essentials", "दवा, देर रात स्नैक व ज़रूरी सामान"],
+  },
+  cab: {
+    "airport-early": ["Airport drops & early flights — long fixed fares", "एयरपोर्ट ड्रॉप व सुबह फ्लाइट — लंबे फिक्स्ड किराए"],
+    "office-am": ["Office commuters — corporate parks & metro stations", "ऑफिस यात्री — कॉर्पोरेट पार्क व मेट्रो"],
+    "mid-morning": ["Hotels, malls & business meetings", "होटल, मॉल व बिज़नेस मीटिंग"],
+    midday: ["Malls, hotels & lunch meetings", "मॉल, होटल व लंच मीटिंग"],
+    "pre-evening": ["Early office leavers & school pickups", "जल्दी निकलते ऑफिस लोग व स्कूल पिकअप"],
+    "office-pm": ["Office return + dinner & mall outings", "ऑफिस वापसी + डिनर व मॉल आउटिंग"],
+    night: ["Nightlife & airport arrivals — bars, clubs, hotels", "नाइटलाइफ़ व एयरपोर्ट अराइवल — बार, क्लब, होटल"],
+  },
+  auto: {
+    "morning-feeder": ["Metro gates — commuters heading to offices & homes", "मेट्रो गेट — ऑफिस व घर जाते यात्री"],
+    "mid-morning": ["Markets, banks & clinics — errand trips", "बाज़ार, बैंक व क्लिनिक — छोटे काम"],
+    midday: ["Rest in shade — heat. Park near a stand & water point", "छाँव में आराम — गर्मी। स्टैंड व पानी पॉइंट के पास"],
+    afternoon: ["Markets & school gates — afternoon pickups", "बाज़ार व स्कूल गेट — दोपहर पिकअप"],
+    "evening-feeder": ["Metro gates — office return to colonies", "मेट्रो गेट — ऑफिस वापसी कॉलोनी तक"],
+    night: ["Markets, diners & the last-metro crowd", "बाज़ार, डाइनर व लास्ट-मेट्रो भीड़"],
+  },
+  biketx: {
+    morning: ["Metro & office gates — solo commuters beating the jam", "मेट्रो व ऑफिस गेट — जाम तोड़ते अकेले यात्री"],
+    midday: ["Rest in shade — heat. Water point nearby", "छाँव में आराम — गर्मी। पास पानी पॉइंट"],
+    afternoon: ["Colleges & markets — quick short hops", "कॉलेज व बाज़ार — तेज़ छोटी हॉप"],
+    evening: ["Metro, colleges & offices — homebound rush", "मेट्रो, कॉलेज व ऑफिस — घर वापसी भीड़"],
+    night: ["Nightlife & late diners — short hops home", "नाइटलाइफ़ व देर डाइनर — घर की छोटी हॉप"],
+  },
+};
+function lookFor(prof: string, windowId: string, hi: boolean): string {
+  const v = WINDOW_LOOK[prof]?.[windowId];
+  return v ? (hi ? v[1] : v[0]) : "";
+}
+
 /** Nearest time-appropriate sub-areas to the rider (across all zones, ≤8 km). */
 function subAreasFor(coords: { lat: number; lon: number } | null, prof: string, windowId: string): SubArea[] {
   if (!coords) return [];
@@ -235,7 +284,7 @@ function NestedSpot({ s }: { s: Spot }) {
   );
 }
 
-function DetailPanel({ d, reason, tag, areas, spots, windowId, fb, isMidday }: { d: ShiftWindow["detail"]; reason: string; tag: typeof TAG[keyof typeof TAG]; areas: Area[]; spots: Spot[]; windowId: string; fb: Feedback; isMidday: boolean }) {
+function DetailPanel({ d, reason, look, tag, areas, spots, windowId, fb, isMidday }: { d: ShiftWindow["detail"]; reason: string; look: string; tag: typeof TAG[keyof typeof TAG]; areas: Area[]; spots: Spot[]; windowId: string; fb: Feedback; isMidday: boolean }) {
   const t = useT();
   const flat = spots.slice(0, 5);
   return (
@@ -248,6 +297,17 @@ function DetailPanel({ d, reason, tag, areas, spots, windowId, fb, isMidday }: {
           <p style={{ margin: 0, fontSize: 13, lineHeight: 1.45, color: "#fff", fontWeight: 600 }}>{d.position}</p>
         </div>
       </div>
+
+      {/* What to stand near RIGHT NOW — specific & time-appropriate */}
+      {look && (
+        <div style={{ display: "flex", gap: 9, alignItems: "flex-start", padding: "10px 12px", borderRadius: 12, background: G.green50, border: `1px solid ${G.green100}`, marginBottom: 14 }}>
+          <span style={{ fontSize: 15, lineHeight: 1.1 }}>🎯</span>
+          <div>
+            <div style={{ fontSize: 9.5, fontWeight: 800, letterSpacing: ".6px", textTransform: "uppercase", color: G.green700, marginBottom: 2 }}>{t("d.lookFor")}</div>
+            <p style={{ margin: 0, fontSize: 12.5, lineHeight: 1.45, color: G.ink2, fontWeight: 600 }}>{look}</p>
+          </div>
+        </div>
+      )}
 
       {/* Why now — the earning reason */}
       <div style={{ display: "flex", gap: 8, alignItems: "flex-start", marginBottom: 14 }}>
@@ -293,19 +353,21 @@ function WindowCard({ w, idx, isAvoid, active, spots, areas, areaName, zoneId, c
   const [open, setOpen] = useState((idx === 0 || !!active) && !isAvoid);
   const tag = TAG[w.tag];
   const t = useT();
+  const lang = useLang();
+  const look = lookFor(profId, w.id, lang === "hi"); // time-specific "what to stand near"
   const winSpots = spotsForWindow(profId, w.id, spots);
   const kinds = WINDOW_KINDS[profId]?.[w.id] ?? null;
   const matchKind = (s: Spot) => !kinds || kinds.includes(s.kind);
 
   // Primary: curated sub-areas for THIS zone + window (change through the day),
-  // with the live places nested by proximity (within ~2.5 km of the sub-area).
+  // with the live places nested by proximity (within ~3.5 km of the sub-area).
   let winAreas: { name: string; distKm: number; spots: Spot[] }[] = subAreasFor(coords, profId, w.id).map((sa) => ({
     name: sa.name,
     distKm: coords ? Math.round(haversineKm(coords.lat, coords.lon, sa.lat, sa.lon) * 10) / 10 : 0,
     spots: coords
       ? spots.filter(matchKind)
           .map((s) => ({ s, d: haversineKm(sa.lat, sa.lon, s.lat, s.lon) }))
-          .filter((x) => x.d <= 2.5).sort((a, b) => a.d - b.d).slice(0, 3).map((x) => x.s)
+          .filter((x) => x.d <= 3.5).sort((a, b) => a.d - b.d).slice(0, 4).map((x) => x.s)
       : [],
   }));
   if (coords && winAreas.length) winAreas = winAreas.sort((a, b) => a.distKm - b.distKm).filter((a, i) => a.distKm <= 6 || i < 2);
@@ -318,7 +380,7 @@ function WindowCard({ w, idx, isAvoid, active, spots, areas, areaName, zoneId, c
   if (winAreas.length === 0 && winSpots.length > 0) {
     winAreas = [{ name: areaName, distKm: 0, spots: winSpots.slice(0, 4) }];
   }
-  const isMidday = w.startH < 15.5 && w.endH > 12; // overlaps the 12–3:30 PM peak-heat window
+  const isMidday = w.startH < 15 && w.endH > 12; // overlaps the 12–3 PM peak-heat window
 
   if (isAvoid) {
     return (
@@ -395,7 +457,7 @@ function WindowCard({ w, idx, isAvoid, active, spots, areas, areaName, zoneId, c
         </button>
       )}
 
-      {open && <DetailPanel d={w.detail} reason={w.reason} tag={tag} areas={winAreas} spots={winSpots} windowId={w.id} fb={fb} isMidday={isMidday} />}
+      {open && <DetailPanel d={w.detail} reason={w.reason} look={look} tag={tag} areas={winAreas} spots={winSpots} windowId={w.id} fb={fb} isMidday={isMidday} />}
     </div>
   );
 }
