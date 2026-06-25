@@ -62,6 +62,7 @@ const en = {
   "d.whyGood": "Why it's good now", "d.traffic": "Traffic",
   "d.cityZones": "Busy areas to head to", "d.busyZone": "Busy area · tap for map",
   "fb.q": "Busy now?", "fb.yes": "Busy", "fb.no": "Quiet", "fb.thanks": "Thanks!", "fb.usuallyBusy": "Riders say busy", "fb.oftenQuiet": "Riders say quiet", "fb.mixed": "Mixed reports",
+  "d.areasNear": "Areas near you (within 5 km)", "shifts.heatMidday": "Peak heat 12–3:30 PM — drink water every 20 min, rest in shade, wear light clothes.",
   "d.peak": "Peak", "d.high": "High", "d.good": "Good",
 
   // heat
@@ -152,6 +153,7 @@ const hi: Record<Key, string> = {
   "d.whyGood": "अभी क्यों अच्छा है", "d.traffic": "ट्रैफ़िक",
   "d.cityZones": "जाने लायक व्यस्त इलाके", "d.busyZone": "व्यस्त इलाका · मैप के लिए टैप करें",
   "fb.q": "अभी भीड़?", "fb.yes": "भीड़ है", "fb.no": "खाली है", "fb.thanks": "धन्यवाद!", "fb.usuallyBusy": "राइडर: भीड़ रहती है", "fb.oftenQuiet": "राइडर: अक्सर खाली", "fb.mixed": "मिले-जुले",
+  "d.areasNear": "आपके पास के इलाके (5 किमी में)", "shifts.heatMidday": "दोपहर 12–3:30 तेज़ गर्मी — हर 20 मिनट में पानी पिएँ, छाँव में आराम करें, हल्के कपड़े पहनें।",
   "d.peak": "सबसे ज़्यादा", "d.high": "ज़्यादा", "d.good": "अच्छा",
 
   "heat.title": "गर्मी सुरक्षा", "heat.updated": "अपडेटेड", "heat.refreshes": "हर घंटे रिफ्रेश · दिल्ली NCR",

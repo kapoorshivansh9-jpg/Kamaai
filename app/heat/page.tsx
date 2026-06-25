@@ -36,6 +36,39 @@ const METRIC_ICONS = {
 type Tone = "safe" | "mod" | "high" | "ext";
 interface Live { live: true; tempC: number | null; feelsLikeC: number; humidity: number | null; aqi: number | null; uv: number | null; level: Tone; }
 
+// India CPCB AQI from PM2.5/PM10 (same bands as the server route). Used by the
+// browser-side fallback below so a stale "500" sample never sticks around.
+const PM25_BANDS = [[0, 30, 0, 50], [30, 60, 51, 100], [60, 90, 101, 200], [90, 120, 201, 300], [120, 250, 301, 400], [250, 500, 401, 500]];
+const PM10_BANDS = [[0, 50, 0, 50], [50, 100, 51, 100], [100, 250, 101, 200], [250, 350, 201, 300], [350, 430, 301, 400], [430, 600, 401, 500]];
+function cpcbSub(c: number, bands: number[][]): number {
+  for (const [cl, ch, il, ih] of bands) if (c <= ch) return Math.round(((ih - il) / (ch - cl)) * (c - cl) + il);
+  return 500;
+}
+function cpcbAqi(pm25: number | null, pm10: number | null): number | null {
+  const idx: number[] = [];
+  if (typeof pm25 === "number") idx.push(cpcbSub(pm25, PM25_BANDS));
+  if (typeof pm10 === "number") idx.push(cpcbSub(pm10, PM10_BANDS));
+  return idx.length ? Math.max(...idx) : null;
+}
+// Open-Meteo is CORS-enabled, so the browser can reach it even when the dev
+// server's outbound fetch is blocked (the cause of the stale-AQI bug).
+async function conditionsDirect(lat: number, lon: number): Promise<Live | null> {
+  try {
+    const [wr, ar] = await Promise.all([
+      fetch(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,relative_humidity_2m,apparent_temperature,uv_index`),
+      fetch(`https://air-quality-api.open-meteo.com/v1/air-quality?latitude=${lat}&longitude=${lon}&current=pm2_5,pm10,us_aqi`),
+    ]);
+    const w = wr.ok ? (await wr.json())?.current ?? {} : {};
+    const a = ar.ok ? (await ar.json())?.current ?? {} : {};
+    const tempC = typeof w.temperature_2m === "number" ? w.temperature_2m : null;
+    const feels = typeof w.apparent_temperature === "number" ? w.apparent_temperature : (tempC ?? 0);
+    const aqi = cpcbAqi(typeof a.pm2_5 === "number" ? a.pm2_5 : null, typeof a.pm10 === "number" ? a.pm10 : null) ?? (typeof a.us_aqi === "number" ? a.us_aqi : null);
+    if (tempC == null && aqi == null) return null;
+    const level: Tone = feels >= 45 ? "ext" : feels >= 40 ? "high" : feels >= 36 ? "mod" : "safe";
+    return { live: true, tempC, feelsLikeC: Math.round(feels), humidity: typeof w.relative_humidity_2m === "number" ? Math.round(w.relative_humidity_2m) : null, aqi, uv: typeof w.uv_index === "number" ? Math.round(w.uv_index) : null, level };
+  } catch { return null; }
+}
+
 const TONE_KEY: Record<Tone, "heat.safe" | "heat.caution" | "heat.high" | "heat.extreme"> = {
   safe: "heat.safe", mod: "heat.caution", high: "heat.high", ext: "heat.extreme",
 };
@@ -226,8 +259,14 @@ export default function HeatPage() {
       try {
         const r = await fetch(`/api/conditions?lat=${lat}&lon=${lon}`);
         const j = await r.json();
-        if (j?.live) setLive(j as Live);
-      } catch { /* keep sample data */ }
+        // Use the server result only if it's complete; otherwise fetch live
+        // weather/AQI straight from the browser so a stale sample never shows.
+        if (j?.live && j.tempC != null && j.aqi != null) setLive(j as Live);
+        else { const d = await conditionsDirect(lat, lon); setLive(d ?? (j?.live ? (j as Live) : null)); }
+      } catch {
+        const d = await conditionsDirect(lat, lon);
+        if (d) setLive(d);
+      }
       setCoords({ lat, lon });
       // Prefer the crowdsourced DB (reliable); fall back to live OSM, then sample.
       const db = await fetchNearbyWaterPoints(lat, lon);

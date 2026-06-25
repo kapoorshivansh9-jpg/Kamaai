@@ -7,7 +7,7 @@ import { useProfile } from "@/lib/ridekamao-profile";
 import { windowsFor, detectZone, isWindowActive } from "@/lib/ridekamao-data";
 import { trackEvent, submitSpotFeedback, fetchZoneStats, type ZoneStat } from "@/lib/supabase-events";
 import { useT, useLang, profTitle, localeTag } from "@/lib/i18n";
-import type { ShiftWindow, Zone } from "@/lib/ridekamao-data";
+import type { ShiftWindow, Zone, Hotspot } from "@/lib/ridekamao-data";
 
 const G = {
   green: "#0A9060", green700: "#045234", green600: "#066B47", green50: "#D8F5E8", green100: "#B4EAD0",
@@ -43,6 +43,7 @@ const HEAT_CHIP: Record<"peak" | "high" | "good", { bg: string; ink: string; key
 };
 
 type Spot = { name: string; kind: string; lat: number; lon: number; distKm: number };
+type Area = { name: string; distKm: number; spots: Spot[] };
 const dirUrl = (lat: number, lon: number) => `https://www.google.com/maps/dir/?api=1&destination=${lat},${lon}`;
 const searchUrl = (q: string) => `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(q)}`;
 
@@ -60,22 +61,6 @@ function spotsForWindow(prof: string, windowId: string, spots: Spot[]): Spot[] {
   if (!kinds) return spots;
   const matched = spots.filter((s) => kinds.includes(s.kind));
   return matched.length ? matched : spots; // keep differentiation when possible, else show what's near
-}
-
-// Hand-picked high-demand areas across Delhi NCR per gig type — INCLUDING places
-// far from the rider — so the plan says "aim for the busy areas", not just
-// whatever happens to be nearest. Rotated per window so each slot differs.
-const STRATEGIC: Record<string, string[]> = {
-  food: ["Hauz Khas & SDA", "Connaught Place", "Cyber Hub, Gurgaon", "Sector 29, Gurgaon", "Khan Market", "Sector 18, Noida", "Saket malls", "Nehru Place"],
-  qcom: ["Dwarka sub-city", "Noida Sector 50–78", "Gurgaon DLF phases", "Rohini & Pitampura", "Mayur Vihar", "Vasant Kunj", "Indirapuram", "Janakpuri"],
-  cab: ["IGI Airport T3", "Aerocity hotels", "Cyber City, Gurgaon", "Nehru Place", "Hauz Khas", "Connaught Place", "Saket", "Sector 18, Noida"],
-  auto: ["Rajiv Chowk Metro", "Kashmere Gate ISBT", "Lajpat Nagar market", "Sarojini Nagar", "Karol Bagh", "Chandni Chowk", "Nehru Place", "Laxmi Nagar"],
-  biketx: ["Rajiv Chowk Metro", "Hauz Khas Metro", "Nehru Place", "Lajpat Nagar", "Karol Bagh", "Saket Metro", "Noida City Centre", "HUDA City Centre"],
-};
-function strategicFor(prof: string, windowId: string, n = 3): string[] {
-  const all = STRATEGIC[prof] ?? STRATEGIC.food;
-  let h = 0; for (const c of windowId) h = (h + c.charCodeAt(0)) % all.length; // stable per-window rotation
-  return Array.from({ length: Math.min(n, all.length) }, (_, i) => all[(h + i) % all.length]);
 }
 
 function SpotRow({ href, title, sub }: { href: string; title: string; sub: string }) {
@@ -96,14 +81,15 @@ function SpotRow({ href, title, sub }: { href: string; title: string; sub: strin
 
 type Feedback = { stats: Record<string, ZoneStat> | null; voted: Set<string>; vote: (zone: string, windowId: string, busy: boolean) => void };
 
-function ZoneRow({ zone, windowId, fb }: { zone: string; windowId: string; fb: Feedback }) {
+function ZoneRow({ zone, windowId, fb, distKm }: { zone: string; windowId: string; fb: Feedback; distKm?: number }) {
   const t = useT();
   const stat = fb.stats?.[zone];
   const votes = stat ? stat.busy + stat.quiet : 0;
   const voted = fb.voted.has(zone);
-  const badge = votes > 0
+  const crowd = votes > 0
     ? `${stat!.score >= 0.6 ? "🔥 " + t("fb.usuallyBusy") : stat!.score <= 0.4 ? t("fb.oftenQuiet") : t("fb.mixed")} · ${votes}`
-    : t("d.busyZone");
+    : t("fb.q");
+  const badge = distKm != null ? `${distKm} km · ${crowd}` : crowd;
   const voteBtn = (bg: string) => ({ width: 30, height: 30, borderRadius: 9, border: `1px solid ${G.line}`, background: bg, fontSize: 14, lineHeight: 1, cursor: "pointer", flexShrink: 0, display: "flex" as const, alignItems: "center", justifyContent: "center" });
   return (
     <div style={{ display: "flex", gap: 8, alignItems: "center", padding: "9px 11px", borderRadius: 11, background: G.surface, border: `1px solid ${G.line}` }}>
@@ -132,13 +118,45 @@ function GroupLabel({ children }: { children: string }) {
   return <div style={{ fontSize: 9.5, fontWeight: 800, letterSpacing: ".7px", textTransform: "uppercase", color: G.faint, marginBottom: 8 }}>{children}</div>;
 }
 
-function DetailPanel({ d, tag, spots, cityZones, windowId, fb }: { d: ShiftWindow["detail"]; tag: typeof TAG[keyof typeof TAG]; spots: Spot[]; cityZones: string[]; windowId: string; fb: Feedback }) {
+// Curated spot with its busy "key" (peak/high/good) — used when we have no live data.
+function HotspotRow({ h }: { h: Hotspot }) {
   const t = useT();
-  const live = spots.slice(0, 5);
+  const chip = HEAT_CHIP[h.heat];
+  return (
+    <a href={searchUrl(`${h.name}, Delhi NCR`)} target="_blank" rel="noopener noreferrer"
+      style={{ display: "flex", gap: 10, alignItems: "center", padding: "9px 11px", borderRadius: 11, background: G.surface, border: `1px solid ${G.line}`, textDecoration: "none" }}>
+      <div style={{ width: 26, height: 26, borderRadius: 8, flexShrink: 0, background: G.green50, display: "flex", alignItems: "center", justifyContent: "center" }}>
+        <MapPin size={14} color={G.green700} />
+      </div>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontSize: 13, fontWeight: 700, color: G.ink, lineHeight: 1.25 }}>{h.name}</div>
+        <div style={{ fontSize: 11.5, color: G.muted, marginTop: 2, lineHeight: 1.4 }}>{h.why}</div>
+      </div>
+      <span style={{ flexShrink: 0, padding: "2px 7px", borderRadius: 6, fontSize: 9.5, fontWeight: 800, letterSpacing: ".3px", textTransform: "uppercase", background: chip.bg, color: chip.ink }}>{t(chip.key)}</span>
+    </a>
+  );
+}
+
+// One real place nested under an area (compact row → Maps directions).
+function NestedSpot({ s }: { s: Spot }) {
+  return (
+    <a href={dirUrl(s.lat, s.lon)} target="_blank" rel="noopener noreferrer"
+      style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 4px", textDecoration: "none" }}>
+      <span style={{ width: 5, height: 5, borderRadius: "50%", background: G.green, flexShrink: 0 }} />
+      <span style={{ flex: 1, minWidth: 0, fontSize: 12.5, fontWeight: 600, color: G.ink2, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{s.name}</span>
+      <span style={{ fontSize: 11, color: G.faint, flexShrink: 0 }}>{s.kind} · {s.distKm}km</span>
+      <Navigation size={13} color={G.green} style={{ flexShrink: 0 }} />
+    </a>
+  );
+}
+
+function DetailPanel({ d, reason, tag, areas, spots, windowId, fb, isMidday }: { d: ShiftWindow["detail"]; reason: string; tag: typeof TAG[keyof typeof TAG]; areas: Area[]; spots: Spot[]; windowId: string; fb: Feedback; isMidday: boolean }) {
+  const t = useT();
+  const flat = spots.slice(0, 5);
   return (
     <div style={{ padding: "14px 16px 16px", borderTop: `1px solid ${G.line2}`, background: `${tag.bg}40`, animation: "rk-fadeUp .25s both" }}>
       {/* Where to be */}
-      <div style={{ display: "flex", gap: 10, alignItems: "flex-start", padding: "10px 12px", borderRadius: 12, background: G.green, marginBottom: 14 }}>
+      <div style={{ display: "flex", gap: 10, alignItems: "flex-start", padding: "10px 12px", borderRadius: 12, background: G.green, marginBottom: 12 }}>
         <Target size={15} color="#fff" style={{ flexShrink: 0, marginTop: 1 }} />
         <div>
           <div style={{ fontSize: 9.5, fontWeight: 800, letterSpacing: ".7px", textTransform: "uppercase", color: "rgba(255,255,255,.7)", marginBottom: 2 }}>{t("d.whereToBe")}</div>
@@ -146,23 +164,38 @@ function DetailPanel({ d, tag, spots, cityZones, windowId, fb }: { d: ShiftWindo
         </div>
       </div>
 
-      {/* Busy zones to aim for — curated (can be far) + rider busy/quiet votes */}
-      <GroupLabel>{t("d.cityZones")}</GroupLabel>
-      <div style={{ display: "flex", flexDirection: "column", gap: 7, marginBottom: 14 }}>
-        {cityZones.map((z, i) => <ZoneRow key={i} zone={z} windowId={windowId} fb={fb} />)}
+      {/* Why now — the earning reason */}
+      <div style={{ display: "flex", gap: 8, alignItems: "flex-start", marginBottom: 14 }}>
+        <Zap size={13} color={G.green700} style={{ flexShrink: 0, marginTop: 2 }} />
+        <p style={{ margin: 0, fontSize: 12.5, lineHeight: 1.5, color: G.ink2 }}>{reason}</p>
       </div>
 
-      {/* Real places near you — live from OpenStreetMap (tap = directions) */}
-      {live.length > 0 && (
-        <>
-          <GroupLabel>{t("shifts.liveSpots")}</GroupLabel>
-          <div style={{ display: "flex", flexDirection: "column", gap: 7, marginBottom: 14 }}>
-            {live.map((s, i) => <SpotRow key={i} href={dirUrl(s.lat, s.lon)} title={s.name} sub={`${s.kind} · ${s.distKm} km`} />)}
-          </div>
-        </>
+      {/* Heat advisory for the dangerous midday window */}
+      {isMidday && (
+        <div style={{ display: "flex", gap: 9, alignItems: "flex-start", padding: "10px 12px", borderRadius: 11, background: G.redBg, border: "1px solid rgba(201,59,53,.25)", marginBottom: 14 }}>
+          <span style={{ fontSize: 15, lineHeight: 1 }}>🥵</span>
+          <p style={{ margin: 0, fontSize: 12, lineHeight: 1.45, color: G.redInk, fontWeight: 600 }}>{t("shifts.heatMidday")}</p>
+        </div>
       )}
 
-      {/* Tip */}
+      {/* Places — grouped under nearby areas (≤5 km) when we have live data */}
+      <GroupLabel>{areas.length > 0 ? t("d.areasNear") : t("d.bestSpots")}</GroupLabel>
+      <div style={{ display: "flex", flexDirection: "column", gap: areas.length > 0 ? 10 : 7, marginBottom: 14 }}>
+        {areas.length > 0
+          ? areas.map((a, i) => (
+              <div key={i} style={{ border: `1px solid ${G.line}`, borderRadius: 12, overflow: "hidden", background: G.surface }}>
+                <ZoneRow zone={a.name} distKm={a.distKm > 0 ? a.distKm : undefined} windowId={windowId} fb={fb} />
+                <div style={{ borderTop: `1px solid ${G.line2}`, padding: "4px 11px 8px" }}>
+                  {a.spots.map((s, j) => <NestedSpot key={j} s={s} />)}
+                </div>
+              </div>
+            ))
+          : flat.length > 0
+            ? flat.map((s, i) => <SpotRow key={i} href={dirUrl(s.lat, s.lon)} title={s.name} sub={`${s.kind} · ${s.distKm} km`} />)
+            : d.hotspots.map((h, i) => <HotspotRow key={i} h={h} />)}
+      </div>
+
+      {/* Money tip */}
       <div style={{ display: "flex", gap: 9, alignItems: "flex-start", padding: "10px 12px", borderRadius: 11, background: "rgba(245,197,66,.14)", border: "1px solid rgba(201,110,0,.22)" }}>
         <Lightbulb size={15} color={G.amber} style={{ flexShrink: 0, marginTop: 1 }} />
         <p style={{ margin: 0, fontSize: 12, lineHeight: 1.45, color: G.amberInk, fontWeight: 600 }}>{d.tip}</p>
@@ -171,12 +204,22 @@ function DetailPanel({ d, tag, spots, cityZones, windowId, fb }: { d: ShiftWindo
   );
 }
 
-function WindowCard({ w, idx, isAvoid, active, spots, profId, fb }: { w: ShiftWindow; idx: number; isAvoid: boolean; active?: boolean; spots: Spot[]; profId: string; fb: Feedback }) {
+function WindowCard({ w, idx, isAvoid, active, spots, areas, areaName, profId, fb }: { w: ShiftWindow; idx: number; isAvoid: boolean; active?: boolean; spots: Spot[]; areas: Area[]; areaName: string; profId: string; fb: Feedback }) {
   const [open, setOpen] = useState((idx === 0 || !!active) && !isAvoid);
   const tag = TAG[w.tag];
   const t = useT();
   const winSpots = spotsForWindow(profId, w.id, spots);
-  const cityZones = strategicFor(profId, w.id);
+  const kinds = WINDOW_KINDS[profId]?.[w.id] ?? null;
+  let winAreas = areas
+    .map((a) => ({ name: a.name, distKm: a.distKm, spots: (kinds ? a.spots.filter((s) => kinds.includes(s.kind)) : a.spots).slice(0, 3) }))
+    .filter((a) => a.spots.length > 0)
+    .slice(0, 3);
+  // When OSM has no neighbourhood tags nearby, group the live places under the
+  // rider's own area so the "area → places" structure still shows.
+  if (winAreas.length === 0 && winSpots.length > 0) {
+    winAreas = [{ name: areaName, distKm: 0, spots: winSpots.slice(0, 4) }];
+  }
+  const isMidday = w.startH < 15.5 && w.endH > 12; // overlaps the 12–3:30 PM peak-heat window
 
   if (isAvoid) {
     return (
@@ -253,7 +296,7 @@ function WindowCard({ w, idx, isAvoid, active, spots, profId, fb }: { w: ShiftWi
         </button>
       )}
 
-      {open && <DetailPanel d={w.detail} tag={tag} spots={winSpots} cityZones={cityZones} windowId={w.id} fb={fb} />}
+      {open && <DetailPanel d={w.detail} reason={w.reason} tag={tag} areas={winAreas} spots={winSpots} windowId={w.id} fb={fb} isMidday={isMidday} />}
     </div>
   );
 }
@@ -266,6 +309,7 @@ export default function ShiftsPage() {
   const [zone, setZone] = useState<Zone | null>(null);
   const [coords, setCoords] = useState<{ lat: number; lon: number } | null>(null);
   const [spots, setSpots] = useState<Spot[]>([]);
+  const [areas, setAreas] = useState<Area[]>([]);
   const [traffic, setTraffic] = useState<{ level: "light" | "moderate" | "heavy" } | null>(null);
   const [zoneStats, setZoneStats] = useState<Record<string, ZoneStat> | null>(null);
   const [voted, setVoted] = useState<Set<string>>(new Set());
@@ -312,7 +356,11 @@ export default function ShiftsPage() {
     let cancelled = false;
     fetch(`/api/hotspots?lat=${coords.lat}&lon=${coords.lon}&prof=${profile.profession}`)
       .then((r) => r.json())
-      .then((j) => { if (!cancelled && Array.isArray(j?.spots)) setSpots(j.spots); })
+      .then((j) => {
+        if (cancelled) return;
+        if (Array.isArray(j?.spots)) setSpots(j.spots);
+        if (Array.isArray(j?.areas)) setAreas(j.areas);
+      })
       .catch(() => { /* keep playbook spots */ });
     // Live road congestion (TomTom; no-op without TOMTOM_API_KEY).
     fetch(`/api/traffic?lat=${coords.lat}&lon=${coords.lon}`)
@@ -328,6 +376,7 @@ export default function ShiftsPage() {
   const allWindows = windowsFor(profile.profession, zone, now, lang);
   const avoidWindow = allWindows.find((w) => w.tag === "avoid");
   const rideWindows = allWindows.filter((w) => w.tag !== "avoid");
+  const areaLabel = zone ? zone.label : t("common.ncr");
   const vote = (zone: string, windowId: string, busy: boolean) => {
     setVoted((prev) => {
       const n = new Set(prev); n.add(zone);
@@ -439,8 +488,8 @@ export default function ShiftsPage() {
           <span style={{ fontWeight: 700, fontSize: 12, letterSpacing: ".7px", textTransform: "uppercase", color: G.faint }}>{t("shifts.allWindows")}</span>
           <span style={{ fontSize: 11.5, fontWeight: 700, color: G.green700 }}>{rideWindows.length} {t("shifts.ride")}{avoidWindow ? ` · 1 ${t("shifts.avoid")}` : ""}</span>
         </div>
-        {rideWindows.map((w, i) => <WindowCard key={i} w={w} idx={i} isAvoid={false} active={isWindowActive(w, now)} spots={spots} profId={profile.profession} fb={feedback} />)}
-        {avoidWindow && <WindowCard w={avoidWindow} idx={0} isAvoid active={isWindowActive(avoidWindow, now)} spots={spots} profId={profile.profession} fb={feedback} />}
+        {rideWindows.map((w, i) => <WindowCard key={i} w={w} idx={i} isAvoid={false} active={isWindowActive(w, now)} spots={spots} areas={areas} areaName={areaLabel} profId={profile.profession} fb={feedback} />)}
+        {avoidWindow && <WindowCard w={avoidWindow} idx={0} isAvoid active={isWindowActive(avoidWindow, now)} spots={spots} areas={areas} areaName={areaLabel} profId={profile.profession} fb={feedback} />}
       </div>
     </div>
   );

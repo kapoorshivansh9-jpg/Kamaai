@@ -12,13 +12,31 @@ const Q = z.object({
   prof: z.enum(["food", "qcom", "cab", "auto", "biketx"]).default("food"),
 });
 
-const RADIUS_M = 6000;
+const RADIUS_M = 5000;
 const TIMEOUT_MS = 7000;
 const TTL = 15 * 60 * 1000;
 const cache = new Map<string, { at: number; data: Spot[] }>();
 
-interface Spot { name: string; kind: string; lat: number; lon: number; distKm: number; score: number; }
+interface Spot { name: string; kind: string; lat: number; lon: number; distKm: number; score: number; area: string | null; }
+interface Area { name: string; distKm: number; spots: Spot[]; }
 interface OsmEl { lat?: number; lon?: number; center?: { lat: number; lon: number }; tags?: Record<string, string>; }
+
+// Group the real places by their OSM neighbourhood (addr:suburb etc.), so the
+// app can say "head to <area>" and list the live spots inside it. Areas are all
+// within the 5 km search, sorted nearest-first.
+function buildAreas(spots: Spot[]): Area[] {
+  const m = new Map<string, Spot[]>();
+  for (const s of spots) {
+    if (!s.area) continue;
+    const list = m.get(s.area) ?? [];
+    list.push(s);
+    m.set(s.area, list);
+  }
+  return [...m.entries()]
+    .map(([name, ss]) => ({ name, distKm: Math.min(...ss.map((s) => s.distKm)), spots: ss.sort((a, b) => b.score - a.score || a.distKm - b.distKm) }))
+    .sort((a, b) => a.distKm - b.distKm)
+    .slice(0, 6);
+}
 
 // Quality score so we surface notable, real, recognisable places — not just the
 // nearest random POI. OSM "wikidata/wikipedia" = notable; "brand" = known chain;
@@ -105,7 +123,8 @@ async function fetchSpots(lat: number, lon: number, prof: string): Promise<Spot[
         const name = tags["name:en"] || tags.name;
         if (la == null || lo == null || !name) return null;
         const distKm = Math.round(haversineKm(lat, lon, la, lo) * 10) / 10;
-        return { name, kind: kindOf(tags), lat: la, lon: lo, distKm, score: qualityScore(tags, distKm) };
+        const area = tags["addr:suburb"] || tags["addr:neighbourhood"] || tags["addr:city_district"] || tags["addr:quarter"] || null;
+        return { name, kind: kindOf(tags), lat: la, lon: lo, distKm, score: qualityScore(tags, distKm), area };
       })
       .filter((s): s is Spot => s !== null)
       // Drop duplicate chains (e.g. two "Starbucks") — keep the best-scored one.
@@ -133,12 +152,12 @@ export async function GET(request: Request) {
   const { lat, lon, prof } = parsed.data;
   const ck = `${prof}:${lat.toFixed(2)},${lon.toFixed(2)}`;
   const hit = cache.get(ck);
-  if (hit && Date.now() - hit.at < TTL) return Response.json({ spots: hit.data });
+  if (hit && Date.now() - hit.at < TTL) return Response.json({ areas: buildAreas(hit.data), spots: hit.data });
 
   const spots = await Promise.race<Spot[]>([
     fetchSpots(lat, lon, prof),
     new Promise<Spot[]>((res) => setTimeout(() => res([]), TIMEOUT_MS + 500)),
   ]);
   if (spots.length) cache.set(ck, { at: Date.now(), data: spots });
-  return Response.json({ spots });
+  return Response.json({ areas: buildAreas(spots), spots });
 }
