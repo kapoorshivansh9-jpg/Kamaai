@@ -75,6 +75,10 @@ const SUBAREAS: Record<string, SubArea[]> = {
     { name: "Karol Bagh", lat: 28.6510, lon: 77.1900, vibes: ["market", "food", "residential"] },
     { name: "Paharganj / New Delhi Stn", lat: 28.6450, lon: 77.2120, vibes: ["metro", "food", "residential"] },
     { name: "Gole Market homes", lat: 28.6280, lon: 77.2010, vibes: ["residential"] },
+    { name: "Khan Market", lat: 28.5995, lon: 77.2270, vibes: ["food", "market", "nightlife"] },
+    { name: "Bengali Market", lat: 28.6290, lon: 77.2300, vibes: ["food", "market"] },
+    { name: "Rajendra Place / Patel Nagar", lat: 28.6440, lon: 77.1810, vibes: ["office", "metro", "residential"] },
+    { name: "Daryaganj / Chawri Bazaar", lat: 28.6480, lon: 77.2330, vibes: ["market", "food", "metro"] },
   ],
   noida: [
     { name: "Sector 18 (Atta Market)", lat: 28.5705, lon: 77.3210, vibes: ["market", "food", "nightlife", "metro"] },
@@ -82,6 +86,13 @@ const SUBAREAS: Record<string, SubArea[]> = {
     { name: "Sector 15/16 offices", lat: 28.5790, lon: 77.3120, vibes: ["office", "metro"] },
     { name: "Sector 50–78 societies", lat: 28.5760, lon: 77.3600, vibes: ["residential"] },
     { name: "Sector 137 / Expressway", lat: 28.4980, lon: 77.4090, vibes: ["office", "residential"] },
+    { name: "Sector 104/105 societies", lat: 28.5560, lon: 77.3650, vibes: ["residential"] },
+    { name: "Gardens Galleria & GIP malls", lat: 28.5680, lon: 77.3260, vibes: ["market", "food", "nightlife"] },
+    { name: "Sector 32 City Centre", lat: 28.5740, lon: 77.3560, vibes: ["metro", "market"] },
+    { name: "Film City (Sector 16A)", lat: 28.5810, lon: 77.3170, vibes: ["office"] },
+    { name: "Sector 76–79 societies", lat: 28.5680, lon: 77.3850, vibes: ["residential"] },
+    { name: "Sector 168 / Expressway", lat: 28.5230, lon: 77.4380, vibes: ["office", "residential"] },
+    { name: "Greater Noida (Pari Chowk)", lat: 28.4670, lon: 77.5030, vibes: ["market", "residential", "food"] },
   ],
   gurgaon: [
     { name: "Cyber City / Cyber Hub", lat: 28.4940, lon: 77.0880, vibes: ["office", "food", "nightlife"] },
@@ -89,6 +100,12 @@ const SUBAREAS: Record<string, SubArea[]> = {
     { name: "DLF Phase 1–5", lat: 28.4720, lon: 77.0950, vibes: ["residential"] },
     { name: "MG Road / Sikanderpur", lat: 28.4790, lon: 77.0800, vibes: ["metro", "market", "nightlife"] },
     { name: "Sohna Road societies", lat: 28.4180, lon: 77.0370, vibes: ["residential", "food"] },
+    { name: "Golf Course Road", lat: 28.4500, lon: 77.1020, vibes: ["office", "residential", "nightlife"] },
+    { name: "Ambience Mall / NH-8", lat: 28.5040, lon: 77.0960, vibes: ["market", "food"] },
+    { name: "Sushant Lok / Sector 56", lat: 28.4250, lon: 77.1010, vibes: ["residential", "market"] },
+    { name: "Udyog Vihar", lat: 28.5020, lon: 77.0840, vibes: ["office"] },
+    { name: "New Gurgaon (Sector 82–95)", lat: 28.4000, lon: 76.9700, vibes: ["residential"] },
+    { name: "Rajiv Chowk / Sohna flyover", lat: 28.4430, lon: 77.0290, vibes: ["market", "metro"] },
   ],
   rohini: [
     { name: "Rohini Sector 3 Market", lat: 28.7150, lon: 77.1140, vibes: ["market", "food"] },
@@ -96,6 +113,10 @@ const SUBAREAS: Record<string, SubArea[]> = {
     { name: "Rohini West Metro", lat: 28.7140, lon: 77.1080, vibes: ["metro", "residential"] },
     { name: "Pitampura (TV Tower)", lat: 28.7030, lon: 77.1310, vibes: ["market", "residential"] },
     { name: "Sector 7–13 flats", lat: 28.7050, lon: 77.1000, vibes: ["residential"] },
+    { name: "Unity One Mall (Sector 10)", lat: 28.7210, lon: 77.1130, vibes: ["market", "food", "nightlife"] },
+    { name: "Prashant Vihar", lat: 28.7100, lon: 77.1230, vibes: ["residential", "food"] },
+    { name: "Kohat Enclave metro", lat: 28.6980, lon: 77.1390, vibes: ["metro", "market"] },
+    { name: "Mangolpuri / Sultanpuri", lat: 28.6900, lon: 77.0700, vibes: ["residential", "market"] },
   ],
   dwarka: [
     { name: "Sector 6 Market", lat: 28.5920, lon: 77.0460, vibes: ["market", "food"] },
@@ -103,6 +124,10 @@ const SUBAREAS: Record<string, SubArea[]> = {
     { name: "Dwarka Sector 21 Metro", lat: 28.5520, lon: 77.0580, vibes: ["metro"] },
     { name: "Sector 10–14 societies", lat: 28.5870, lon: 77.0550, vibes: ["residential"] },
     { name: "Dwarka Expressway offices", lat: 28.5050, lon: 77.0610, vibes: ["office", "residential"] },
+    { name: "Pacific Mall (Sector 23)", lat: 28.5780, lon: 77.0680, vibes: ["market", "food", "nightlife"] },
+    { name: "Janakpuri District Centre", lat: 28.6290, lon: 77.0780, vibes: ["office", "market", "metro"] },
+    { name: "Uttam Nagar", lat: 28.6210, lon: 77.0600, vibes: ["residential", "market"] },
+    { name: "Sector 12 / Dwarka Mor", lat: 28.6190, lon: 77.0330, vibes: ["metro", "market", "residential"] },
   ],
   saket: [
     { name: "Select Citywalk / Saket", lat: 28.5280, lon: 77.2190, vibes: ["market", "food", "nightlife"] },
@@ -110,6 +135,10 @@ const SUBAREAS: Record<string, SubArea[]> = {
     { name: "Malviya Nagar", lat: 28.5350, lon: 77.2060, vibes: ["market", "food", "residential"] },
     { name: "Saket Metro / District Centre", lat: 28.5240, lon: 77.2050, vibes: ["metro", "office"] },
     { name: "Saidulajab homes", lat: 28.5160, lon: 77.1990, vibes: ["residential"] },
+    { name: "Greater Kailash (M/N-block)", lat: 28.5480, lon: 77.2420, vibes: ["food", "market", "nightlife"] },
+    { name: "Green Park market", lat: 28.5600, lon: 77.2060, vibes: ["food", "market", "metro"] },
+    { name: "Vasant Kunj malls", lat: 28.5400, lon: 77.1590, vibes: ["market", "food", "residential"] },
+    { name: "Mehrauli / Lado Sarai", lat: 28.5160, lon: 77.1820, vibes: ["food", "residential", "nightlife"] },
   ],
   lajpat: [
     { name: "Lajpat Nagar Central Market", lat: 28.5680, lon: 77.2430, vibes: ["market", "food"] },
@@ -117,6 +146,10 @@ const SUBAREAS: Record<string, SubArea[]> = {
     { name: "Defence Colony", lat: 28.5730, lon: 77.2300, vibes: ["food", "nightlife", "residential"] },
     { name: "Lajpat Nagar Metro", lat: 28.5700, lon: 77.2360, vibes: ["metro"] },
     { name: "Nizamuddin homes", lat: 28.5910, lon: 77.2440, vibes: ["residential"] },
+    { name: "Kalkaji / Govindpuri metro", lat: 28.5430, lon: 77.2580, vibes: ["metro", "market", "residential"] },
+    { name: "Ashram / Sarai Kale Khan", lat: 28.5830, lon: 77.2570, vibes: ["metro", "office"] },
+    { name: "Jangpura / Bhogal", lat: 28.5840, lon: 77.2450, vibes: ["food", "market", "residential"] },
+    { name: "Greater Kailash I", lat: 28.5530, lon: 77.2350, vibes: ["food", "market", "nightlife"] },
   ],
 };
 
@@ -183,7 +216,7 @@ function ZoneRow({ zone, windowId, fb, distKm }: { zone: string; windowId: strin
           <MapPin size={14} color={G.green700} />
         </div>
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontSize: 13, fontWeight: 700, color: G.ink, lineHeight: 1.25, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{zone}</div>
+          <div style={{ fontSize: 14.5, fontWeight: 700, color: G.ink, lineHeight: 1.25, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{zone}</div>
           <div style={{ fontSize: 11, color: votes > 0 && stat!.score >= 0.6 ? G.green700 : G.muted, marginTop: 2, lineHeight: 1.4, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{badge}</div>
         </div>
       </a>
@@ -228,7 +261,7 @@ function NestedSpot({ s }: { s: Spot }) {
     <a href={dirUrl(s.lat, s.lon)} target="_blank" rel="noopener noreferrer"
       style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 4px", textDecoration: "none" }}>
       <span style={{ width: 5, height: 5, borderRadius: "50%", background: G.green, flexShrink: 0 }} />
-      <span style={{ flex: 1, minWidth: 0, fontSize: 12.5, fontWeight: 600, color: G.ink2, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{s.name}</span>
+      <span style={{ flex: 1, minWidth: 0, fontSize: 13.5, fontWeight: 600, color: G.ink2, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{s.name}</span>
       <span style={{ fontSize: 11, color: G.faint, flexShrink: 0 }}>{s.kind} · {s.distKm}km</span>
       <Navigation size={13} color={G.green} style={{ flexShrink: 0 }} />
     </a>
