@@ -43,7 +43,7 @@ const HEAT_CHIP: Record<"peak" | "high" | "good", { bg: string; ink: string; key
 };
 
 type Spot = { name: string; kind: string; lat: number; lon: number; distKm: number };
-type Area = { name: string; distKm: number; spots: Spot[] };
+type Area = { name: string; distKm: number; spots: Spot[]; heat?: "peak" | "high" | "good" };
 const dirUrl = (lat: number, lon: number) => `https://www.google.com/maps/dir/?api=1&destination=${lat},${lon}`;
 const searchUrl = (q: string) => `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(q)}`;
 
@@ -199,8 +199,9 @@ function SpotRow({ href, title, sub }: { href: string; title: string; sub: strin
 
 type Feedback = { stats: Record<string, ZoneStat> | null; voted: Set<string>; vote: (zone: string, windowId: string, busy: boolean) => void };
 
-function ZoneRow({ zone, windowId, fb, distKm }: { zone: string; windowId: string; fb: Feedback; distKm?: number }) {
+function ZoneRow({ zone, windowId, fb, distKm, heat }: { zone: string; windowId: string; fb: Feedback; distKm?: number; heat?: "peak" | "high" | "good" }) {
   const t = useT();
+  const chip = heat ? HEAT_CHIP[heat] : null;
   const stat = fb.stats?.[zone];
   const votes = stat ? stat.busy + stat.quiet : 0;
   const voted = fb.voted.has(zone);
@@ -216,7 +217,10 @@ function ZoneRow({ zone, windowId, fb, distKm }: { zone: string; windowId: strin
           <MapPin size={14} color={G.green700} />
         </div>
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontSize: 14.5, fontWeight: 700, color: G.ink, lineHeight: 1.25, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{zone}</div>
+          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+            <div style={{ flex: 1, minWidth: 0, fontSize: 14.5, fontWeight: 700, color: G.ink, lineHeight: 1.25, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{zone}</div>
+            {chip && <span style={{ flexShrink: 0, padding: "2px 7px", borderRadius: 6, fontSize: 9.5, fontWeight: 800, letterSpacing: ".3px", textTransform: "uppercase", background: chip.bg, color: chip.ink }}>{t(chip.key)}</span>}
+          </div>
           <div style={{ fontSize: 11, color: votes > 0 && stat!.score >= 0.6 ? G.green700 : G.muted, marginTop: 2, lineHeight: 1.4, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{badge}</div>
         </div>
       </a>
@@ -303,7 +307,7 @@ function DetailPanel({ d, reason, tag, areas, spots, windowId, fb, isMidday }: {
         {areas.length > 0
           ? areas.map((a, i) => (
               <div key={i} style={{ border: `1px solid ${G.line}`, borderRadius: 12, overflow: "hidden", background: G.surface }}>
-                <ZoneRow zone={a.name} distKm={a.distKm > 0 ? a.distKm : undefined} windowId={windowId} fb={fb} />
+                <ZoneRow zone={a.name} distKm={a.distKm > 0 ? a.distKm : undefined} windowId={windowId} fb={fb} heat={a.heat} />
                 <div style={{ borderTop: `1px solid ${G.line2}`, padding: "4px 11px 8px" }}>
                   {a.spots.map((s, j) => <NestedSpot key={j} s={s} />)}
                 </div>
@@ -334,7 +338,7 @@ function WindowCard({ w, idx, isAvoid, active, spots, areas, areaName, zoneId, c
   // Curated sub-areas for THIS zone + window (change through the day), each with
   // the real nearby places (within ~4 km) nested inside. Only keep areas that
   // actually have specific spots, so the rider never sees a bare area name.
-  let winAreas: { name: string; distKm: number; spots: Spot[] }[] = subAreasFor(coords, profId, w.id)
+  let winAreas: Area[] = subAreasFor(coords, profId, w.id)
     .map((sa) => ({
       name: sa.name,
       distKm: coords ? Math.round(haversineKm(coords.lat, coords.lon, sa.lat, sa.lon) * 10) / 10 : 0,
@@ -355,6 +359,16 @@ function WindowCard({ w, idx, isAvoid, active, spots, areas, areaName, zoneId, c
   if (winAreas.length === 0 && winSpots.length > 0) {
     winAreas = [{ name: areaName, distKm: 0, spots: winSpots.slice(0, 5) }];
   }
+
+  // Rank the shown areas by busyness — real spot density + your busy/quiet votes,
+  // with closeness as a slight edge — and badge them peak / high / good.
+  const HEATS = ["peak", "high", "good"] as const;
+  const areaScore = (a: Area) => {
+    const st = fb.stats?.[a.name];
+    const netVotes = st ? st.busy - st.quiet : 0;
+    return a.spots.length * 2 + netVotes * 1.5 - a.distKm * 0.4;
+  };
+  winAreas = [...winAreas].sort((x, y) => areaScore(y) - areaScore(x)).map((a, i) => ({ ...a, heat: HEATS[Math.min(i, 2)] }));
   const isMidday = w.startH < 15 && w.endH > 12; // overlaps the 12–3 PM peak-heat window
 
   if (isAvoid) {
