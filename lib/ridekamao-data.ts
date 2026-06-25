@@ -216,11 +216,11 @@ const PLAYBOOK: Record<string, WinSpec[]> = {
         { place: ["{food}", "{food}"], why: ["Brunch & coffee orders", "ब्रंच व कॉफ़ी ऑर्डर"], heat: "high" },
         { place: ["{mall}", "{mall}"], why: ["Café & bakery pickups", "कैफ़े व बेकरी पिकअप"], heat: "good" },
       ],
-      tip: ["A calm window to rack up easy short orders before the lunch rush.", "लंच रश से पहले आसान छोटे ऑर्डर बटोरने की शांत विंडो।"] },
+      tip: ["A calm window to get easy short orders before the lunch rush.", "लंच रश से पहले आसान छोटे ऑर्डर बटोरने की शांत विंडो।"] },
     { id: "lunch", time: "12:00 – 3:00 PM", startH: 12, endH: 15, mult: 2.0, demand: 0.95, rphr: 230,
       tag: "surge", tagText: ["2.0× lunch peak", "2.0× लंच पीक"], label: ["Lunch peak", "लंच पीक"],
       reason: ["Your biggest daytime money window — office & home lunch orders surge. Drink water: midday heat is high.", "दिन की सबसे बड़ी कमाई विंडो — ऑफिस व घर के लंच ऑर्डर सर्ज। पानी पिएँ: दोपहर गर्मी तेज़।"],
-      position: ["Camp at {office} and {food}; pick batched orders going the same way.", "{office} व {food} पर रहें; एक ही दिशा के बैच ऑर्डर लें।"],
+      position: ["Wait at {office} and {food}; pick batched orders going the same way.", "{office} व {food} पर रहें; एक ही दिशा के बैच ऑर्डर लें।"],
       hotspots: [
         { place: ["{office}", "{office}"], why: ["Office lunch orders at peak", "ऑफिस लंच ऑर्डर पीक पर"], heat: "peak" },
         { place: ["{food}", "{food}"], why: ["Restaurants firing lunch fastest", "रेस्तराँ सबसे तेज़ लंच बना रहे"], heat: "peak" },
@@ -301,7 +301,7 @@ const PLAYBOOK: Record<string, WinSpec[]> = {
     { id: "evening", time: "6:00 – 9:30 PM", startH: 18, endH: 21.5, mult: 1.9, demand: 0.92, rphr: 185,
       tag: "surge", tagText: ["1.9× evening", "1.9× शाम"], label: ["Evening grocery surge", "शाम ग्रोसरी सर्ज"],
       reason: ["Families order dinner groceries, snacks & vegetables after work — the day's busiest stretch.", "परिवार काम के बाद डिनर ग्रोसरी, स्नैक व सब्ज़ी मंगाते — दिन का सबसे व्यस्त समय।"],
-      position: ["Camp at the dark store covering {residential} — orders stack fast.", "{residential} कवर करने वाले डार्क स्टोर पर रहें — ऑर्डर तेज़ी से बढ़ते।"],
+      position: ["Wait at the dark store covering {residential} — orders stack fast.", "{residential} कवर करने वाले डार्क स्टोर पर रहें — ऑर्डर तेज़ी से बढ़ते।"],
       hotspots: [
         { place: ["{residential}", "{residential}"], why: ["Dinner groceries & vegetables", "डिनर ग्रोसरी व सब्ज़ी"], heat: "peak" },
         { place: ["Blinkit / Zepto dark store", "Blinkit / Zepto डार्क स्टोर"], why: ["Snack & essentials surge", "स्नैक व ज़रूरी सामान सर्ज"], heat: "high" },
@@ -338,7 +338,7 @@ const PLAYBOOK: Record<string, WinSpec[]> = {
     { id: "office-am", time: "8:00 – 10:30 AM", startH: 8, endH: 10.5, mult: 1.4, demand: 0.7, rphr: 190,
       tag: "steady", tagText: ["Office rush", "ऑफिस रश"], label: ["Office commute", "ऑफिस कम्यूट"],
       reason: ["Corporate commuters book rides to {office} — steady back-to-back trips.", "कॉर्पोरेट यात्री {office} की राइड बुक करते — स्थिर लगातार ट्रिप।"],
-      position: ["Work {residential} → {office} corridors.", "{residential} → {office} कॉरिडोर पर काम करें।"],
+      position: ["Work {residential} → {office} routes.", "{residential} → {office} कॉरिडोर पर काम करें।"],
       hotspots: [
         { place: ["{office}", "{office}"], why: ["Corporate drop-offs", "कॉर्पोरेट ड्रॉप"], heat: "high" },
         { place: ["{metro}", "{metro}"], why: ["Last-mile from metro to office", "मेट्रो से ऑफिस तक last-mile"], heat: "good" },
@@ -369,7 +369,7 @@ const PLAYBOOK: Record<string, WinSpec[]> = {
     { id: "pre-evening", time: "4:00 – 6:00 PM", startH: 16, endH: 18, mult: 1.3, demand: 0.62, rphr: 185,
       tag: "steady", tagText: ["Warming up", "बढ़ रहा"], label: ["Pre-evening pickup", "शाम से पहले"],
       reason: ["Early office leavers, school pickups and mall trips build before the evening surge.", "जल्दी निकलते ऑफिस लोग, स्कूल पिकअप व मॉल ट्रिप शाम सर्ज से पहले बढ़ते।"],
-      position: ["Pre-position between {office} and {mall} as offices start to empty.", "ऑफिस खाली होते ही {office} व {mall} के बीच पहले से पोज़िशन लें।"],
+      position: ["Wait between {office} and {mall} as offices start to empty.", "ऑफिस खाली होते ही {office} व {mall} के बीच पहले से पोज़िशन लें।"],
       hotspots: [
         { place: ["{office}", "{office}"], why: ["Early leavers & client drops", "जल्दी निकलते लोग व क्लाइंट ड्रॉप"], heat: "high" },
         { place: ["{mall}", "{mall}"], why: ["Afternoon shoppers", "दोपहर शॉपर"], heat: "good" },
@@ -482,7 +482,7 @@ const PLAYBOOK: Record<string, WinSpec[]> = {
     { id: "midday", time: "12:00 – 3:30 PM", startH: 12, endH: 15.5, mult: 0.8, demand: 0.3, rphr: 85,
       tag: "avoid", tagText: ["Heat 46°C", "गर्मी 46°C"], label: ["Midday — avoid", "दोपहर — टालें"],
       reason: ["Fully exposed on a bike in 46°C with few riders — rest in shade and hydrate, don't chase low fares.", "46°C में बाइक पर पूरी तरह खुले व कम सवारी — छाँव में आराम व पानी, कम किराए न पीछे भागें।"],
-      position: ["Park in shade near {metro}; rest and rehydrate. See the Heat tab for water points.", "{metro} के पास छाँव में पार्क करें; आराम व पानी। पानी पॉइंट के लिए गर्मी टैब देखें।"],
+      position: ["Park in shade near {metro}; rest and drink water. See the Heat tab for water points.", "{metro} के पास छाँव में पार्क करें; आराम व पानी। पानी पॉइंट के लिए गर्मी टैब देखें।"],
       hotspots: [
         { place: ["Shaded waiting spot", "छायादार जगह"], why: ["Cool off and rest", "ठंडे हों व आराम करें"], heat: "good" },
         { place: ["Free water points", "मुफ़्त पानी पॉइंट"], why: ["Rehydrate — see Heat tab", "पानी पिएँ — गर्मी टैब देखें"], heat: "good" },

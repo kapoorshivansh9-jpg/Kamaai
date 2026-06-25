@@ -12,7 +12,7 @@ const Q = z.object({
   prof: z.enum(["food", "qcom", "cab", "auto", "biketx"]).default("food"),
 });
 
-const RADIUS_M = 4000;
+const RADIUS_M = 6000;
 const TIMEOUT_MS = 7000;
 const TTL = 15 * 60 * 1000;
 const cache = new Map<string, { at: number; data: Spot[] }>();
@@ -108,9 +108,16 @@ async function fetchSpots(lat: number, lon: number, prof: string): Promise<Spot[
         return { name, kind: kindOf(tags), lat: la, lon: lo, distKm, score: qualityScore(tags, distKm) };
       })
       .filter((s): s is Spot => s !== null)
+      // Drop duplicate chains (e.g. two "Starbucks") — keep the best-scored one.
+      .reduce<Spot[]>((acc, s) => {
+        const i = acc.findIndex((x) => x.name.toLowerCase() === s.name.toLowerCase());
+        if (i === -1) acc.push(s);
+        else if (s.score > acc[i].score) acc[i] = s;
+        return acc;
+      }, [])
       // Best-quality first, nearest as the tie-breaker.
       .sort((a, b) => b.score - a.score || a.distKm - b.distKm)
-      .slice(0, 24);
+      .slice(0, 30);
   } catch {
     return [];
   } finally {

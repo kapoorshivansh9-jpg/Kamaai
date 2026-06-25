@@ -60,6 +60,7 @@ const en = {
   // detail panel
   "d.whereToBe": "Where to be", "d.bestSpots": "Best spots right now",
   "d.whyGood": "Why it's good now", "d.traffic": "Traffic",
+  "d.cityZones": "Busy areas to head to", "d.busyZone": "Busy area · tap for map",
   "d.peak": "Peak", "d.high": "High", "d.good": "Good",
 
   // heat
@@ -148,6 +149,7 @@ const hi: Record<Key, string> = {
   "shifts.now": "अभी", "shifts.avoidBadge": "टालें", "shifts.rightNow": "अभी चल रहा",
   "d.whereToBe": "कहाँ रहें", "d.bestSpots": "अभी सबसे अच्छी जगहें",
   "d.whyGood": "अभी क्यों अच्छा है", "d.traffic": "ट्रैफ़िक",
+  "d.cityZones": "जाने लायक व्यस्त इलाके", "d.busyZone": "व्यस्त इलाका · मैप के लिए टैप करें",
   "d.peak": "सबसे ज़्यादा", "d.high": "ज़्यादा", "d.good": "अच्छा",
 
   "heat.title": "गर्मी सुरक्षा", "heat.updated": "अपडेटेड", "heat.refreshes": "हर घंटे रिफ्रेश · दिल्ली NCR",
@@ -227,6 +229,7 @@ const pa: Partial<Record<Key, string>> = {
   "shifts.now": "ਹੁਣ", "shifts.avoidBadge": "ਟਾਲੋ", "shifts.rightNow": "ਹੁਣੇ ਚੱਲ ਰਿਹਾ",
   "d.whereToBe": "ਕਿੱਥੇ ਰਹੋ", "d.bestSpots": "ਹੁਣ ਵਧੀਆ ਥਾਂਵਾਂ",
   "d.whyGood": "ਹੁਣ ਕਿਉਂ ਵਧੀਆ ਹੈ", "d.traffic": "ਟ੍ਰੈਫ਼ਿਕ",
+  "d.cityZones": "ਜਾਣ ਯੋਗ ਵਿਅਸਤ ਇਲਾਕੇ", "d.busyZone": "ਵਿਅਸਤ ਇਲਾਕਾ · ਮੈਪ ਲਈ ਟੈਪ ਕਰੋ",
   "d.peak": "ਸਿਖਰ", "d.high": "ਵੱਧ", "d.good": "ਚੰਗਾ",
   "heat.title": "ਗਰਮੀ ਸੁਰੱਖਿਆ", "heat.updated": "ਅੱਪਡੇਟ", "heat.refreshes": "ਹਰ ਘੰਟੇ ਰਿਫ੍ਰੈਸ਼ · ਦਿੱਲੀ NCR",
   "heat.indexNcr": "ਹੀਟ ਸੇਫ਼ਟੀ ਇੰਡੈਕਸ · ਦਿੱਲੀ NCR", "heat.takeBreaks": "ਨਿਯਮਿਤ ਬ੍ਰੇਕ ਲਵੋ ਤੇ ਪਾਣੀ ਪੀਓ",
@@ -299,6 +302,7 @@ const bn: Partial<Record<Key, string>> = {
   "shifts.now": "এখন", "shifts.avoidBadge": "এড়ান", "shifts.rightNow": "এখন চলছে",
   "d.whereToBe": "কোথায় থাকবেন", "d.bestSpots": "এখন সেরা জায়গা",
   "d.whyGood": "এখন কেন ভালো", "d.traffic": "ট্রাফিক",
+  "d.cityZones": "যেখানে যাবেন এমন ব্যস্ত এলাকা", "d.busyZone": "ব্যস্ত এলাকা · ম্যাপের জন্য ট্যাপ করুন",
   "d.peak": "সর্বোচ্চ", "d.high": "বেশি", "d.good": "ভালো",
   "heat.title": "গরম সুরক্ষা", "heat.updated": "আপডেট", "heat.refreshes": "প্রতি ঘণ্টায় রিফ্রেশ · দিল্লি NCR",
   "heat.indexNcr": "হিট সেফটি ইনডেক্স · দিল্লি NCR", "heat.takeBreaks": "নিয়মিত বিরতি নিন ও জল খান",
@@ -371,6 +375,7 @@ const ta: Partial<Record<Key, string>> = {
   "shifts.now": "இப்போது", "shifts.avoidBadge": "தவிர்", "shifts.rightNow": "இப்போது நடக்கிறது",
   "d.whereToBe": "எங்கே இருக்க வேண்டும்", "d.bestSpots": "இப்போது சிறந்த இடங்கள்",
   "d.whyGood": "இப்போது ஏன் நல்லது", "d.traffic": "போக்குவரத்து",
+  "d.cityZones": "செல்ல வேண்டிய பரபரப்பான பகுதிகள்", "d.busyZone": "பரபரப்பான பகுதி · வரைபடத்திற்கு தட்டவும்",
   "d.peak": "உச்சம்", "d.high": "அதிகம்", "d.good": "நல்லது",
   "heat.title": "வெப்ப பாதுகாப்பு", "heat.updated": "புதுப்பிப்பு", "heat.refreshes": "ஒவ்வொரு மணியும் புதுப்பிப்பு · டெல்லி NCR",
   "heat.indexNcr": "வெப்ப பாதுகாப்பு குறியீடு · டெல்லி NCR", "heat.takeBreaks": "தவறாமல் இடைவெளி எடுத்து தண்ணீர் குடியுங்கள்",
@@ -443,6 +448,7 @@ const mr: Partial<Record<Key, string>> = {
   "shifts.now": "आता", "shifts.avoidBadge": "टाळा", "shifts.rightNow": "आत्ता सुरू",
   "d.whereToBe": "कुठे राहावे", "d.bestSpots": "आता सर्वोत्तम ठिकाणे",
   "d.whyGood": "आता का चांगले आहे", "d.traffic": "वाहतूक",
+  "d.cityZones": "जायला हवी अशी गजबजलेली ठिकाणे", "d.busyZone": "गजबजलेले ठिकाण · नकाशासाठी टॅप करा",
   "d.peak": "उच्च", "d.high": "जास्त", "d.good": "चांगले",
   "heat.title": "उष्णता सुरक्षा", "heat.updated": "अपडेट", "heat.refreshes": "दर तासाला रिफ्रेश · दिल्ली NCR",
   "heat.indexNcr": "हीट सेफ्टी इंडेक्स · दिल्ली NCR", "heat.takeBreaks": "नियमित ब्रेक घ्या आणि पाणी प्या",

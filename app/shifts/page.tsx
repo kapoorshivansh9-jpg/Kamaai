@@ -62,6 +62,22 @@ function spotsForWindow(prof: string, windowId: string, spots: Spot[]): Spot[] {
   return matched.length ? matched : spots; // keep differentiation when possible, else show what's near
 }
 
+// Hand-picked high-demand areas across Delhi NCR per gig type — INCLUDING places
+// far from the rider — so the plan says "aim for the busy areas", not just
+// whatever happens to be nearest. Rotated per window so each slot differs.
+const STRATEGIC: Record<string, string[]> = {
+  food: ["Hauz Khas & SDA", "Connaught Place", "Cyber Hub, Gurgaon", "Sector 29, Gurgaon", "Khan Market", "Sector 18, Noida", "Saket malls", "Nehru Place"],
+  qcom: ["Dwarka sub-city", "Noida Sector 50–78", "Gurgaon DLF phases", "Rohini & Pitampura", "Mayur Vihar", "Vasant Kunj", "Indirapuram", "Janakpuri"],
+  cab: ["IGI Airport T3", "Aerocity hotels", "Cyber City, Gurgaon", "Nehru Place", "Hauz Khas", "Connaught Place", "Saket", "Sector 18, Noida"],
+  auto: ["Rajiv Chowk Metro", "Kashmere Gate ISBT", "Lajpat Nagar market", "Sarojini Nagar", "Karol Bagh", "Chandni Chowk", "Nehru Place", "Laxmi Nagar"],
+  biketx: ["Rajiv Chowk Metro", "Hauz Khas Metro", "Nehru Place", "Lajpat Nagar", "Karol Bagh", "Saket Metro", "Noida City Centre", "HUDA City Centre"],
+};
+function strategicFor(prof: string, windowId: string, n = 3): string[] {
+  const all = STRATEGIC[prof] ?? STRATEGIC.food;
+  let h = 0; for (const c of windowId) h = (h + c.charCodeAt(0)) % all.length; // stable per-window rotation
+  return Array.from({ length: Math.min(n, all.length) }, (_, i) => all[(h + i) % all.length]);
+}
+
 function SpotRow({ href, title, sub }: { href: string; title: string; sub: string }) {
   return (
     <a href={href} target="_blank" rel="noopener noreferrer"
@@ -78,9 +94,13 @@ function SpotRow({ href, title, sub }: { href: string; title: string; sub: strin
   );
 }
 
-function DetailPanel({ d, tag, spots, area }: { d: ShiftWindow["detail"]; tag: typeof TAG[keyof typeof TAG]; spots: Spot[]; area: string }) {
+function GroupLabel({ children }: { children: string }) {
+  return <div style={{ fontSize: 9.5, fontWeight: 800, letterSpacing: ".7px", textTransform: "uppercase", color: G.faint, marginBottom: 8 }}>{children}</div>;
+}
+
+function DetailPanel({ d, tag, spots, area, cityZones }: { d: ShiftWindow["detail"]; tag: typeof TAG[keyof typeof TAG]; spots: Spot[]; area: string; cityZones: string[] }) {
   const t = useT();
-  const live = spots.slice(0, 4);
+  const live = spots.slice(0, 5);
   return (
     <div style={{ padding: "14px 16px 16px", borderTop: `1px solid ${G.line2}`, background: `${tag.bg}40`, animation: "rk-fadeUp .25s both" }}>
       {/* Where to be */}
@@ -92,13 +112,21 @@ function DetailPanel({ d, tag, spots, area }: { d: ShiftWindow["detail"]; tag: t
         </div>
       </div>
 
-      {/* Best spots — every place opens Google Maps directions */}
-      <div style={{ fontSize: 9.5, fontWeight: 800, letterSpacing: ".7px", textTransform: "uppercase", color: G.faint, marginBottom: 8 }}>{t("d.bestSpots")}</div>
+      {/* Busy zones to aim for — curated, can be across the city (tap = Maps) */}
+      <GroupLabel>{t("d.cityZones")}</GroupLabel>
       <div style={{ display: "flex", flexDirection: "column", gap: 7, marginBottom: 14 }}>
-        {live.length > 0
-          ? live.map((s, i) => <SpotRow key={i} href={dirUrl(s.lat, s.lon)} title={s.name} sub={`${s.kind} · ${s.distKm} km`} />)
-          : d.hotspots.map((h, i) => <SpotRow key={i} href={searchUrl(`${h.name}, ${area}`)} title={h.name} sub={h.why} />)}
+        {cityZones.map((z, i) => <SpotRow key={i} href={searchUrl(z)} title={z} sub={t("d.busyZone")} />)}
       </div>
+
+      {/* Real places near you — live from OpenStreetMap (tap = directions) */}
+      {live.length > 0 && (
+        <>
+          <GroupLabel>{t("shifts.liveSpots")}</GroupLabel>
+          <div style={{ display: "flex", flexDirection: "column", gap: 7, marginBottom: 14 }}>
+            {live.map((s, i) => <SpotRow key={i} href={dirUrl(s.lat, s.lon)} title={s.name} sub={`${s.kind} · ${s.distKm} km`} />)}
+          </div>
+        </>
+      )}
 
       {/* Tip */}
       <div style={{ display: "flex", gap: 9, alignItems: "flex-start", padding: "10px 12px", borderRadius: 11, background: "rgba(245,197,66,.14)", border: "1px solid rgba(201,110,0,.22)" }}>
@@ -114,6 +142,7 @@ function WindowCard({ w, idx, isAvoid, active, spots, area, profId }: { w: Shift
   const tag = TAG[w.tag];
   const t = useT();
   const winSpots = spotsForWindow(profId, w.id, spots);
+  const cityZones = strategicFor(profId, w.id);
 
   if (isAvoid) {
     return (
@@ -190,7 +219,7 @@ function WindowCard({ w, idx, isAvoid, active, spots, area, profId }: { w: Shift
         </button>
       )}
 
-      {open && <DetailPanel d={w.detail} tag={tag} spots={winSpots} area={area} />}
+      {open && <DetailPanel d={w.detail} tag={tag} spots={winSpots} area={area} cityZones={cityZones} />}
     </div>
   );
 }
