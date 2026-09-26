@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import { MapPin, AlertTriangle, Target, Zap, Navigation, Lightbulb, ChevronDown } from "lucide-react";
 import { useProfile } from "@/lib/ridekamao-profile";
-import { windowsFor, detectZone, isWindowActive, ZONES, PROFESSIONS } from "@/lib/ridekamao-data";
+import { windowsFor, detectZone, isWindowActive, PROFESSIONS } from "@/lib/ridekamao-data";
 import { trackEvent, submitSpotFeedback, fetchZoneStats, type ZoneStat } from "@/lib/supabase-events";
 import { useT, useLang, profTitle, localeTag } from "@/lib/i18n";
 import type { ShiftWindow, Zone, Hotspot } from "@/lib/ridekamao-data";
@@ -266,8 +266,8 @@ function DetailPanel({ d, reason, tag, areas, spots, windowId, fb, isMidday }: {
   const flat = spots.slice(0, 5);
   return (
     <div style={{ padding: "14px 16px 16px", borderTop: `1px solid ${G.line2}`, background: `${tag.bg}40`, animation: "rk-fadeUp .25s both" }}>
-      {/* Where to be */}
-      <div style={{ display: "flex", gap: 10, alignItems: "flex-start", padding: "10px 12px", borderRadius: 12, background: G.green, marginBottom: 12 }}>
+      {/* Only show a position when nearby mapped places support it. */}
+      {areas.length > 0 || flat.length > 0 ? <div style={{ display: "flex", gap: 10, alignItems: "flex-start", padding: "10px 12px", borderRadius: 12, background: G.green, marginBottom: 12 }}>
         <Target size={15} color="#fff" style={{ flexShrink: 0, marginTop: 1 }} />
         <div>
           <div style={{ fontSize: 9.5, fontWeight: 800, letterSpacing: ".7px", textTransform: "uppercase", color: "rgba(255,255,255,.7)", marginBottom: 2 }}>{t("d.whereToBe")}</div>
@@ -275,6 +275,8 @@ function DetailPanel({ d, reason, tag, areas, spots, windowId, fb, isMidday }: {
         </div>
       </div>
 
+
+      : null}
 
       {/* Why now — the earning reason */}
       <div style={{ display: "flex", gap: 8, alignItems: "flex-start", marginBottom: 14 }}>
@@ -304,7 +306,7 @@ function DetailPanel({ d, reason, tag, areas, spots, windowId, fb, isMidday }: {
             ))
           : flat.length > 0
             ? flat.map((s, i) => <SpotRow key={i} href={dirUrl(s.lat, s.lon)} title={s.name} sub={`${s.kind} · ${s.distKm} km`} />)
-            : d.hotspots.map((h, i) => <HotspotRow key={i} h={h} />)}
+            : <p style={{ margin: 0, fontSize: 12, color: G.muted }}>{t("shifts.noVerifiedSpots")}</p>}
       </div>
 
       {/* Money tip */}
@@ -358,13 +360,12 @@ function WindowCard({ w, idx, isAvoid, active, spots, areas, areaName, zoneId, c
 
   // Rank the shown areas by busyness — real spot density + your busy/quiet votes,
   // with closeness as a slight edge — and badge them peak / high / good.
-  const HEATS = ["peak", "high", "good"] as const;
   const areaScore = (a: Area) => {
     const st = fb.stats?.[a.name];
     const netVotes = st ? st.busy - st.quiet : 0;
     return a.spots.length * 2 + netVotes * 1.5 - a.distKm * 0.4;
   };
-  winAreas = [...winAreas].sort((x, y) => areaScore(y) - areaScore(x)).map((a, i) => ({ ...a, heat: HEATS[Math.min(i, 2)] }));
+  winAreas = [...winAreas].sort((x, y) => areaScore(y) - areaScore(x));
   const isMidday = false; // No fixed-time heat warning without observed local conditions
 
   if (isAvoid) {
@@ -454,6 +455,8 @@ export default function ShiftsPage() {
   const lang = useLang();
   const [zone, setZone] = useState<Zone | null>(null);
   const [coords, setCoords] = useState<{ lat: number; lon: number } | null>(null);
+  const [locatedAt, setLocatedAt] = useState<number | null>(null);
+  const [clock, setClock] = useState(Date.now());
   const [spots, setSpots] = useState<Spot[]>([]);
   const [areas, setAreas] = useState<Area[]>([]);
   const [traffic, setTraffic] = useState<{ level: "light" | "moderate" | "heavy" } | null>(null);
@@ -461,19 +464,26 @@ export default function ShiftsPage() {
   const [voted, setVoted] = useState<Set<string>>(new Set());
   const [locationStatus, setLocationStatus] = useState<"idle" | "requesting" | "granted" | "denied">("idle");
 
-  // Ask for location — callable on mount AND from the "Enable location" button.
+  useEffect(() => { const id = window.setInterval(() => setClock(Date.now()), 60000); return () => window.clearInterval(id); }, []);
+
+  // Only a recent, reasonably accurate browser fix can drive local recommendations.
   const askLocation = () => {
+    setCoords(null); setLocatedAt(null); setZone(null); setSpots([]); setAreas([]); setTraffic(null);
     if (!("geolocation" in navigator)) { setLocationStatus("denied"); return; }
     setLocationStatus("requesting");
     navigator.geolocation.getCurrentPosition(
       (pos) => {
         const lat = pos.coords.latitude, lon = pos.coords.longitude;
+        if (!Number.isFinite(pos.coords.accuracy) || pos.coords.accuracy > 2000 || pos.timestamp > Date.now() + 60000 || Date.now() - pos.timestamp > 15 * 60 * 1000 || !detectZone(lat, lon)) {
+          setLocationStatus("denied"); return;
+        }
         setZone(detectZone(lat, lon));
         setCoords({ lat: Math.round(lat * 100) / 100, lon: Math.round(lon * 100) / 100 });
+        setLocatedAt(pos.timestamp);
         setLocationStatus("granted");
       },
       () => setLocationStatus("denied"),
-      { timeout: 10000, maximumAge: 300000, enableHighAccuracy: false }
+      { timeout: 10000, maximumAge: 0, enableHighAccuracy: true }
     );
   };
 
@@ -497,7 +507,7 @@ export default function ShiftsPage() {
 
   // Pull real nearby places for THIS gig type from OpenStreetMap (/api/hotspots).
   useEffect(() => {
-    if (!coords || (!profile && !guestProfession)) return;
+    if (!coords || !locatedAt || Date.now() - locatedAt >= 15 * 60 * 1000 || (!profile && !guestProfession)) return;
     let cancelled = false;
     fetch(`/api/hotspots?lat=${coords.lat}&lon=${coords.lon}&prof=${profile?.profession ?? guestProfession}`)
       .then((r) => r.json())
@@ -513,14 +523,15 @@ export default function ShiftsPage() {
       .then((j) => { if (!cancelled && j?.available) setTraffic({ level: j.level }); })
       .catch(() => { /* no traffic signal */ });
     return () => { cancelled = true; };
-  }, [profile, guestProfession, coords]);
+  }, [profile, guestProfession, coords, locatedAt]);
 
   if (loading) return <div style={{ padding: 24 }}>{t("shifts.loading")}</div>;
   const profession = profile?.profession ?? guestProfession;
   const guest = !profile;
 
   const now = new Date();
-  const allWindows = profession ? windowsFor(profession, zone, now, lang) : [];
+  const locationReady = !!(coords && zone && locatedAt && clock - locatedAt < 15 * 60 * 1000);
+  const allWindows = profession && locationReady ? windowsFor(profession, zone, now, lang) : [];
   const avoidWindow = allWindows.find((w) => w.tag === "avoid");
   const rideWindows = allWindows.filter((w) => w.tag !== "avoid");
   const areaLabel = zone ? zone.label : t("common.ncr");
@@ -546,17 +557,13 @@ export default function ShiftsPage() {
   return (
     <div style={{ background: G.bg, minHeight: "100%", paddingBottom: 24 }}>
       <div style={{ margin: "18px 20px 0", padding: 16, background: G.surface, borderRadius: 16, border: `1px solid ${G.line}` }}>
-        <div style={{ fontWeight: 800, color: G.ink, marginBottom: 8 }}>{guest ? t("shifts.guestTitle") : t("shifts.chooseArea")}</div>
+        <div style={{ fontWeight: 800, color: G.ink, marginBottom: 8 }}>{guest ? t("shifts.guestTitle") : t("loc.promptTitle")}</div>
         {guest && <><label style={{ display: "block", fontSize: 12, color: G.muted, marginBottom: 4 }}>{t("shifts.chooseGig")}</label>
-        <select aria-label={t("shifts.chooseGig")} value={guestProfession} onChange={e => setGuestProfession(e.target.value)} style={{ width: "100%", minHeight: 42, borderRadius: 9, marginBottom: 12, padding: 8 }}>
+        <select aria-label={t("shifts.chooseGig")} value={guestProfession} onChange={e => setGuestProfession(e.target.value)} style={{ width: "100%", minHeight: 48, borderRadius: 9, marginBottom: 12, padding: "10px 12px" }}>
           <option value="">{t("shifts.chooseGig")}</option>
           {PROFESSIONS.map(p => <option value={p.id} key={p.id}>{profTitle(p.id, lang)}</option>)}
         </select></>}
-        <label style={{ display: "block", fontSize: 12, color: G.muted, marginBottom: 4 }}>{t("shifts.chooseArea")}</label>
-        <select aria-label={t("shifts.chooseArea")} value={zone?.id ?? ""} onChange={e => { setZone(ZONES.find(z => z.id === e.target.value) ?? null); setCoords(null); setSpots([]); setAreas([]); setTraffic(null); }} style={{ width: "100%", minHeight: 42, borderRadius: 9, padding: 8 }}>
-          <option value="">{t("shifts.chooseArea")}</option>
-          {ZONES.map(z => <option value={z.id} key={z.id}>{z.label}</option>)}
-        </select>
+        {!guest && <p style={{ fontSize: 12, lineHeight: 1.45, color: G.muted, margin: 0 }}>{t("loc.promptSub")}</p>}
         {guest && <><p style={{ fontSize: 12, lineHeight: 1.5, color: G.muted }}>{t("shifts.guestNote")}</p>
         <Link href="/onboarding" style={{ color: G.green700, fontWeight: 700 }}>{t("shifts.savePlan")}</Link>
         <p style={{ fontSize: 11, color: G.muted }}>{t("shifts.localOnly")}</p></>}
@@ -570,21 +577,21 @@ export default function ShiftsPage() {
               {t("shifts.title")}
             </h1>
             <div style={{ marginTop: 4, fontSize: 13, color: G.muted }}>
-              {profession ? profTitle(profession, lang) : t("shifts.chooseGig")} · {zone ? zone.label : t("shifts.chooseArea")}
+              {profession ? profTitle(profession, lang) : t("shifts.chooseGig")}{locationReady && zone ? ` · ${zone.label}` : ""}
             </div>
           </div>
           {/* Location indicator */}
-          <div style={{ display: "flex", alignItems: "center", gap: 5, padding: "6px 10px", borderRadius: 10, background: locationStatus === "granted" ? G.green50 : G.surface, border: `1px solid ${locationStatus === "granted" ? G.green100 : G.line}`, flexShrink: 0, marginTop: 2 }}>
-            <MapPin size={13} color={locationStatus === "granted" ? G.green : G.faint} />
-            <span style={{ fontSize: 11, fontWeight: 700, color: locationStatus === "granted" ? G.green700 : G.faint }}>
-              {locationStatus === "requesting" ? t("loc.locating") : locationStatus === "granted" ? t("loc.located") : t("loc.ncr")}
+          <div style={{ display: "flex", alignItems: "center", gap: 5, padding: "6px 10px", borderRadius: 10, background: locationReady ? G.green50 : G.surface, border: `1px solid ${locationReady ? G.green100 : G.line}`, flexShrink: 0, marginTop: 2 }}>
+            <MapPin size={13} color={locationReady ? G.green : G.faint} />
+            <span style={{ fontSize: 11, fontWeight: 700, color: locationReady ? G.green700 : G.faint }}>
+              {locationStatus === "requesting" ? t("loc.locating") : locationReady ? t("loc.located") : t("loc.ncr")}
             </span>
           </div>
         </div>
       </div>
 
       {/* Live traffic near you (TomTom) */}
-      {traffic && (
+      {locationReady && traffic && (
         <div style={{ margin: "14px 20px 0", display: "flex", alignItems: "center", gap: 8, padding: "9px 13px", borderRadius: 12, flexWrap: "wrap",
           background: traffic.level === "heavy" ? G.redBg : traffic.level === "moderate" ? G.amberBg : G.green50,
           border: `1px solid ${traffic.level === "heavy" ? "rgba(201,59,53,.3)" : traffic.level === "moderate" ? G.amber : G.green100}` }}>
@@ -597,9 +604,9 @@ export default function ShiftsPage() {
       )}
 
 
-      {profession && zone && <div style={{ margin: "14px 20px 0", fontSize: 12, color: G.muted }}>{t("shifts.previewNote")}</div>}
+      {profession && locationReady && <div style={{ margin: "14px 20px 0", fontSize: 12, color: G.muted }}>{t("shifts.previewNote")}</div>}
       {/* Zone note */}
-      {zone && profession && (
+      {zone && profession && locationReady && (
         <div style={{ margin: "14px 20px 0", padding: "10px 14px", borderRadius: 12, background: G.green50, border: `1px solid ${G.green100}`, display: "flex", alignItems: "center", gap: 8 }}>
           <MapPin size={14} color={G.green700} />
           <span style={{ fontSize: 12.5, fontWeight: 600, color: G.green700 }}>
@@ -609,21 +616,21 @@ export default function ShiftsPage() {
       )}
 
       {/* Location prompt — without it the plan is generic */}
-      {profession && locationStatus !== "granted" && (
-        <div style={{ margin: "14px 20px 0", padding: "12px 14px", borderRadius: 14, background: G.amberBg, border: "1px solid rgba(201,110,0,.25)", display: "flex", alignItems: "center", gap: 11 }}>
+      {profession && !locationReady && (
+        <div style={{ margin: "14px 20px 0", padding: "12px 14px", borderRadius: 14, background: G.amberBg, border: "1px solid rgba(201,110,0,.25)", display: "flex", alignItems: "center", flexWrap: "wrap", gap: 11 }}>
           <MapPin size={18} color={G.amber} style={{ flexShrink: 0 }} />
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ fontSize: 13, fontWeight: 800, color: G.amberInk, lineHeight: 1.2 }}>{t("loc.promptTitle")}</div>
             <div style={{ fontSize: 11.5, color: G.amberInk, opacity: 0.85, marginTop: 2, lineHeight: 1.35 }}>{t("loc.promptSub")}</div>
           </div>
-          <button onClick={askLocation} disabled={locationStatus === "requesting"} style={{ flexShrink: 0, padding: "9px 13px", borderRadius: 10, border: "none", background: "linear-gradient(180deg,#0B6B48,#064D33)", color: "#fff", fontWeight: 700, fontSize: 12.5, cursor: "pointer" }}>
+          <button onClick={askLocation} disabled={locationStatus === "requesting"} style={{ flexShrink: 0, minHeight: 44, padding: "10px 14px", borderRadius: 10, border: "none", background: "linear-gradient(180deg,#0B6B48,#064D33)", color: "#fff", fontWeight: 700, fontSize: 12.5, cursor: "pointer" }}>
             {locationStatus === "requesting" ? t("loc.locating") : t("loc.enable")}
           </button>
         </div>
       )}
 
       {/* Windows */}
-      {profession && (zone || !guest) && <div style={{ padding: "18px 20px 0" }}>
+      {profession && locationReady && <div style={{ padding: "18px 20px 0" }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
           <span style={{ fontWeight: 700, fontSize: 12, letterSpacing: ".7px", textTransform: "uppercase", color: G.faint }}>{t("shifts.allWindows")}</span>
           <span style={{ fontSize: 11.5, fontWeight: 700, color: G.green700 }}>{rideWindows.length} {t("shifts.ride")}{avoidWindow ? ` · 1 ${t("shifts.avoid")}` : ""}</span>

@@ -43,7 +43,7 @@ function SelectCard({ title, sub, selected, onClick, multi }: {
   title: string; sub?: string; selected: boolean; onClick: () => void; multi?: boolean;
 }) {
   return (
-    <button onClick={onClick} style={{ display: "flex", alignItems: "center", gap: 14, width: "100%", textAlign: "left", padding: "14px 16px", borderRadius: 16, marginBottom: 10, background: G.surface, border: `2px solid ${selected ? G.green : G.line}`, boxShadow: selected ? "0 8px 20px -12px rgba(12,146,103,.4)" : "0 1px 3px rgba(10,24,18,.06)", transition: "all .16s", cursor: "pointer" }}>
+    <button onClick={onClick} style={{ display: "flex", alignItems: "center", gap: 14, width: "100%", minHeight: 56, textAlign: "left", padding: "14px 16px", borderRadius: 16, marginBottom: 10, background: G.surface, border: `2px solid ${selected ? G.green : G.line}`, boxShadow: selected ? "0 8px 20px -12px rgba(12,146,103,.4)" : "0 1px 3px rgba(10,24,18,.06)", transition: "all .16s", cursor: "pointer" }}>
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ fontWeight: 700, fontSize: 15, color: G.ink, lineHeight: 1.25 }}>{title}</div>
         {sub && <div style={{ fontSize: 12, color: G.muted, marginTop: 3 }}>{sub}</div>}
@@ -57,7 +57,7 @@ function SelectCard({ title, sub, selected, onClick, multi }: {
 
 function PrimaryBtn({ children, onClick, disabled }: { children: React.ReactNode; onClick?: () => void; disabled?: boolean; }) {
   return (
-    <button onClick={onClick} disabled={disabled} style={{ width: "100%", height: 52, borderRadius: 16, border: "none", cursor: disabled ? "not-allowed" : "pointer", background: disabled ? "#B8D8CC" : "linear-gradient(180deg,#13A878,#0A8460)", color: "#fff", fontWeight: 700, fontSize: 16, display: "flex", alignItems: "center", justifyContent: "center", gap: 8, boxShadow: disabled ? "none" : "0 10px 22px -8px rgba(10,140,95,.55)", transition: "all .18s" }}>
+    <button onClick={onClick} disabled={disabled} style={{ width: "100%", minHeight: 52, padding: "10px 16px", borderRadius: 16, border: "none", cursor: disabled ? "not-allowed" : "pointer", background: disabled ? "#B8D8CC" : "linear-gradient(180deg,#13A878,#0A8460)", color: "#fff", fontWeight: 700, fontSize: 16, display: "flex", alignItems: "center", justifyContent: "center", gap: 8, boxShadow: disabled ? "none" : "0 10px 22px -8px rgba(10,140,95,.55)", transition: "all .18s" }}>
       {children}
     </button>
   );
@@ -225,7 +225,7 @@ export default function OnboardingPage() {
           <motion.div key={`s${step}`} initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }}>
             {/* Sticky top bar */}
             <div style={{ position: "sticky", top: 0, zIndex: 20, background: G.bg, padding: "18px 20px 12px", display: "flex", alignItems: "center", gap: 12 }}>
-              <button onClick={() => setStep((s) => Math.max(0, s - 1))} style={{ width: 38, height: 38, borderRadius: 11, background: G.surface, border: `1px solid ${G.line}`, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", flexShrink: 0 }}>
+              <button onClick={() => setStep((s) => Math.max(0, s - 1))} style={{ width: 44, height: 44, borderRadius: 11, background: G.surface, border: `1px solid ${G.line}`, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", flexShrink: 0 }}>
                 <ChevronLeft size={20} color={G.ink} />
               </button>
               <ProgressBar step={step - 1} total={3} />
@@ -273,7 +273,7 @@ export default function OnboardingPage() {
                         </div>
                       ) : (
                         <>
-                          <button onClick={() => auth.signIn("/onboarding")} style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 9, width: "100%", height: 50, borderRadius: 14, background: "#fff", border: `1.5px solid ${G.line}`, cursor: "pointer", fontWeight: 700, fontSize: 15, color: G.ink }}>
+                          <button onClick={() => auth.signIn("/onboarding")} style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 9, width: "100%", minHeight: 52, padding: "10px 16px", borderRadius: 14, background: "#fff", border: `1.5px solid ${G.line}`, cursor: "pointer", fontWeight: 700, fontSize: 15, color: G.ink }}>
                             <GoogleIcon /> {tr(lang, "ob.useGoogle")}
                           </button>
                           <div style={{ textAlign: "center", fontSize: 12, color: G.faint, margin: "12px 0 2px" }}>{tr(lang, "ob.orType")}</div>
@@ -299,7 +299,7 @@ export default function OnboardingPage() {
                     </div>
                   )}
 
-                  <PrimaryBtn onClick={() => setGenerating(true)} disabled={!!email && !/.+@.+\..+/.test(email)}>
+                  <PrimaryBtn onClick={() => setGenerating(true)} disabled={!/.+@.+\..+/.test(email)}>
                     {tr(lang, "ob.buildPlan")} <ArrowRight size={18} />
                   </PrimaryBtn>
                 </>

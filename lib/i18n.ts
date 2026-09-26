@@ -42,11 +42,11 @@ const en = {
   "home.tip": "Plan preview · live demand not available",
   "common.rider": "Rider", "common.ncr": "Delhi NCR",
 
-  "shifts.loading": "Loading plan…", "shifts.guestTitle": "Preview a shift plan", "shifts.chooseGig": "What work do you do?", "shifts.chooseArea": "Choose an area", "shifts.guestNote": "Choose a gig and area to preview. Location is optional. This is a template, not live demand.", "shifts.savePlan": "Set up a saved plan", "shifts.localOnly": "A local plan stays on this phone; it does not sync to another device.", "shifts.previewNote": "Example plan only. Work, demand and earnings are not guaranteed.", "shifts.estimateDisclaimer": "Template-based estimates, not real earnings data.", "shifts.areaPlan": "Example plan for", "shifts.estimatedRate": "estimated/hour", "shifts.template": "ESTIMATE",
+  "shifts.loading": "Loading plan…", "shifts.noVerifiedSpots": "No nearby mapped places are available. We will not guess where to go.", "shifts.guestTitle": "Preview a shift plan", "shifts.chooseGig": "What work do you do?", "shifts.chooseArea": "Choose an area", "shifts.guestNote": "Choose your work, then allow live GPS for local recommendations. This is a template, not live demand.", "shifts.savePlan": "Set up a saved plan", "shifts.localOnly": "A local plan stays on this phone; it does not sync to another device.", "shifts.previewNote": "Example plan only. Work, demand and earnings are not guaranteed.", "shifts.estimateDisclaimer": "Template-based estimates, not real earnings data.", "shifts.areaPlan": "Example plan for", "shifts.estimatedRate": "estimated/hour", "shifts.template": "ESTIMATE",
   // shifts
   "shifts.title": "Shift Planner",
   "loc.locating": "Locating…", "loc.located": "Located", "loc.ncr": "Delhi NCR",
-  "loc.promptTitle": "Turn on location", "loc.promptSub": "Get area-level picks and real places near you — without it the plan stays generic.", "loc.enable": "Enable",
+  "loc.promptTitle": "Turn on location", "loc.promptSub": "Local recommendations need a recent, accurate location. No recommendations are shown without it.", "loc.enable": "Enable",
   "shifts.top3": "Today's top 3 windows", "shifts.projected": "projected",
   "shifts.workWindow": "Work window", "shifts.hrs": "hrs", "shifts.vsUsual": "vs usual",
   "shifts.showingSurge": "Showing surge data for",
@@ -81,7 +81,7 @@ const en = {
   "heat.m.aqi": "AQI", "heat.m.temp": "Temp", "heat.m.hum": "Humidity", "heat.m.uv": "UV Index",
 
   "heat.selectArea": "Choose an area", "heat.areaNotNearby": "Showing places mapped near the selected area's centre, not near your location.", "heat.mapped": "mapped places",
-  "heat.noReadings": "Live conditions are unavailable. No current advice is shown.", "heat.noAqi": "AQI unavailable", "heat.readings": "Measured", "heat.unavailable": "Unavailable", "heat.measured": "Measured", "heat.measuredReadings": "Available readings", "heat.indexArea": "Local heat conditions", "heat.chooseArea": "Choose an area or allow location to see mapped amenities.", "heat.allowLocation": "Use my location", "heat.locationDenied": "Location unavailable. No places are marked as nearby.", "heat.noMapped": "No mapped places to show here yet. Try another area.", "heat.mapMapped": "MAPPED · not verified on site", "heat.areaMarker": "Area", "heat.generalAdvice": "If you feel dizzy or unwell, stop in the shade, drink water and seek help. Check current local conditions before riding.",
+  "heat.noReadings": "Live conditions are unavailable. No current advice is shown.", "heat.noAqi": "AQI unavailable", "heat.readings": "Measured", "heat.unavailable": "Unavailable", "heat.measured": "Measured", "heat.measuredReadings": "Available readings", "heat.indexArea": "Local heat conditions", "heat.chooseArea": "Allow live location to see places near you.", "heat.allowLocation": "Use my location", "heat.locationDenied": "A recent, accurate location is needed. No places are marked as nearby.", "heat.noMapped": "No mapped places to show here yet. Try another area.", "heat.mapMapped": "MAPPED · not verified on site", "heat.areaMarker": "Area", "heat.generalAdvice": "If you feel dizzy or unwell, stop in the shade, drink water and seek help. Check current local conditions before riding.",
   // onboarding
   "ob.tagline": "राइड करो · कमाओ · आगे बढ़ो",
   "ob.heroTitle": "Ride smart,\nearn more.",
@@ -139,10 +139,10 @@ const hi: Record<Key, string> = {
   "home.tip": "प्लान का नमूना · लाइव मांग उपलब्ध नहीं",
   "common.rider": "राइडर", "common.ncr": "दिल्ली NCR",
 
-  "shifts.loading": "प्लान खुल रहा है…", "shifts.guestTitle": "शिफ्ट प्लान का नमूना देखें", "shifts.chooseGig": "आप किस तरह का काम करते हैं?", "shifts.chooseArea": "इलाका चुनें", "shifts.guestNote": "नमूना देखने के लिए काम और इलाका चुनें। लोकेशन ज़रूरी नहीं है। यह लाइव मांग नहीं है।", "shifts.savePlan": "सेव किया प्लान बनाएं", "shifts.localOnly": "सेव किया प्लान इसी फ़ोन पर रहेगा; दूसरे फ़ोन पर अपने आप नहीं आएगा।", "shifts.previewNote": "यह सिर्फ़ नमूना है। काम, मांग या कमाई की गारंटी नहीं है।", "shifts.estimateDisclaimer": "नमूने पर आधारित अनुमान, असली कमाई का डेटा नहीं।", "shifts.areaPlan": "इसके लिए नमूना प्लान:", "shifts.estimatedRate": "अनुमान/घंटा", "shifts.template": "अनुमान",
+  "shifts.loading": "प्लान खुल रहा है…", "shifts.noVerifiedSpots": "पास में मैप पर दर्ज जगहें उपलब्ध नहीं हैं। हम जगह का अनुमान नहीं लगाएंगे।", "shifts.guestTitle": "शिफ्ट प्लान का नमूना देखें", "shifts.chooseGig": "आप किस तरह का काम करते हैं?", "shifts.chooseArea": "इलाका चुनें", "shifts.guestNote": "काम चुनें और स्थानीय सुझावों के लिए लाइव GPS दें। यह लाइव मांग नहीं है।", "shifts.savePlan": "सेव किया प्लान बनाएं", "shifts.localOnly": "सेव किया प्लान इसी फ़ोन पर रहेगा; दूसरे फ़ोन पर अपने आप नहीं आएगा।", "shifts.previewNote": "यह सिर्फ़ नमूना है। काम, मांग या कमाई की गारंटी नहीं है।", "shifts.estimateDisclaimer": "नमूने पर आधारित अनुमान, असली कमाई का डेटा नहीं।", "shifts.areaPlan": "इसके लिए नमूना प्लान:", "shifts.estimatedRate": "अनुमान/घंटा", "shifts.template": "अनुमान",
   "shifts.title": "शिफ्ट प्लानर",
   "loc.locating": "ढूँढ रहे हैं…", "loc.located": "मिल गया", "loc.ncr": "दिल्ली NCR",
-  "loc.promptTitle": "लोकेशन चालू करें", "loc.promptSub": "अपने पास के इलाके व असली जगहें पाएँ — इसके बिना प्लान सामान्य रहता है।", "loc.enable": "चालू करें",
+  "loc.promptTitle": "लोकेशन चालू करें", "loc.promptSub": "स्थानीय सुझावों के लिए ताज़ा और सटीक लोकेशन चाहिए। इसके बिना सुझाव नहीं दिखेंगे।", "loc.enable": "चालू करें",
   "shifts.top3": "आज की टॉप 3 विंडो", "shifts.projected": "अनुमानित",
   "shifts.workWindow": "काम का समय", "shifts.hrs": "घंटे", "shifts.vsUsual": "आम दिन से",
   "shifts.showingSurge": "सर्ज डेटा दिखा रहे हैं —",
@@ -175,7 +175,7 @@ const hi: Record<Key, string> = {
   "heat.m.aqi": "AQI", "heat.m.temp": "तापमान", "heat.m.hum": "नमी", "heat.m.uv": "UV इंडेक्स",
 
   "heat.selectArea": "इलाका चुनें", "heat.areaNotNearby": "चुने हुए इलाके के बीच की जगहें दिख रही हैं, आपकी लोकेशन के पास की नहीं।", "heat.mapped": "मैप पर दर्ज जगहें",
-  "heat.noReadings": "अभी ताज़ा मौसम और AQI उपलब्ध नहीं हैं।", "heat.noAqi": "AQI उपलब्ध नहीं है", "heat.readings": "मापे गए आँकड़े", "heat.unavailable": "उपलब्ध नहीं", "heat.measured": "रीडिंग", "heat.measuredReadings": "उपलब्ध रीडिंग", "heat.indexArea": "स्थानीय गर्मी की स्थिति", "heat.chooseArea": "सुविधाएँ देखने के लिए इलाका चुनें या लोकेशन दें।", "heat.allowLocation": "मेरी लोकेशन इस्तेमाल करें", "heat.locationDenied": "लोकेशन उपलब्ध नहीं है। नज़दीकी जगहें नहीं दिखा सकते।", "heat.noMapped": "इस इलाके में अभी मैप पर कोई जगह नहीं दिख रही।", "heat.mapMapped": "मैप पर दर्ज · मौके पर पुष्टि नहीं", "heat.areaMarker": "इलाका", "heat.generalAdvice": "चक्कर आए या तबीयत खराब लगे तो छाँव में रुकें, पानी पिएँ और मदद लें। निकलने से पहले अपने इलाके का ताज़ा मौसम देखें।",
+  "heat.noReadings": "अभी ताज़ा मौसम और AQI उपलब्ध नहीं हैं।", "heat.noAqi": "AQI उपलब्ध नहीं है", "heat.readings": "मापे गए आँकड़े", "heat.unavailable": "उपलब्ध नहीं", "heat.measured": "रीडिंग", "heat.measuredReadings": "उपलब्ध रीडिंग", "heat.indexArea": "स्थानीय गर्मी की स्थिति", "heat.chooseArea": "अपने पास की जगहें देखने के लिए लाइव लोकेशन दें।", "heat.allowLocation": "मेरी लोकेशन इस्तेमाल करें", "heat.locationDenied": "ताज़ा और सटीक लोकेशन चाहिए। नज़दीकी जगहें नहीं दिखा सकते।", "heat.noMapped": "इस इलाके में अभी मैप पर कोई जगह नहीं दिख रही।", "heat.mapMapped": "मैप पर दर्ज · मौके पर पुष्टि नहीं", "heat.areaMarker": "इलाका", "heat.generalAdvice": "चक्कर आए या तबीयत खराब लगे तो छाँव में रुकें, पानी पिएँ और मदद लें। निकलने से पहले अपने इलाके का ताज़ा मौसम देखें।",
   "ob.tagline": "राइड करो · कमाओ · आगे बढ़ो",
   "ob.heroTitle": "स्मार्ट चलाओ,\nज़्यादा कमाओ।",
   "ob.chooseLang": "अपनी भाषा चुनें · Language",

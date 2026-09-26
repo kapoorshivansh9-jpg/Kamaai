@@ -36,20 +36,22 @@ export function useGoogleAuth() {
       return;
     }
     let active = true;
-    supabase.auth.getSession().then(({ data }) => {
+    supabase.auth.getSession().then(({ data, error: sessionError }) => {
       if (!active) return;
       setUser(toUser(data.session));
+      if (sessionError) setError(sessionError.message);
       setReady(true);
-    });
+    }).catch(() => { if (active) { setError("Could not check sign-in. Try again."); setReady(true); } });
     const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => {
       setUser(toUser(session));
     });
     // Surface an OAuth error that came back in the redirect URL (e.g. the
     // Google provider isn't enabled, or the redirect URL isn't allow-listed).
     if (typeof window !== "undefined") {
-      const params = new URLSearchParams(window.location.hash.replace(/^#/, ""));
-      const errDesc = params.get("error_description") || params.get("error");
-      if (errDesc) setError(decodeURIComponent(errDesc.replace(/\+/g, " ")));
+      const query = new URLSearchParams(window.location.search);
+      const fragment = new URLSearchParams(window.location.hash.replace(/^#/, ""));
+      const errDesc = query.get("error_description") || fragment.get("error_description") || query.get("error") || fragment.get("error");
+      if (errDesc) setError(errDesc);
     }
     return () => {
       active = false;

@@ -1,12 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Thermometer, Wind, Droplets, Flame, MapPin, Info, Navigation, Phone } from "lucide-react";
 
 import { useT, useLang, localeTag } from "@/lib/i18n";
 import { fetchNearbyWaterPoints, addWaterPoint } from "@/lib/supabase-events";
 import { supabaseConfigured } from "@/lib/supabase-browser";
-import { ZONES } from "@/lib/ridekamao-data";
 import type { HeatMetric, SattuPoint } from "@/lib/ridekamao-data";
 
 const G = {
@@ -197,11 +196,14 @@ export default function HeatPage() {
   const [water, setWater] = useState<{ name: string | null; distKm: number; lat: number; lon: number; category?: string }[] | null>(null);
   const [coords, setCoords] = useState<{ lat: number; lon: number } | null>(null);
   const [locationRequested, setLocationRequested] = useState(false);
-  const [selectedArea, setSelectedArea] = useState("");
+  const [locatedAt, setLocatedAt] = useState<number | null>(null);
+  const [clock, setClock] = useState(Date.now());
   const [cat, setCat] = useState<string>("all");
   const [addOpen, setAddOpen] = useState(false);
   const [addCat, setAddCat] = useState<string>("water");
   const [addName, setAddName] = useState("");
+
+  useEffect(() => { const id = window.setInterval(() => setClock(Date.now()), 60000); return () => window.clearInterval(id); }, []);
 
   const load = async (lat: number, lon: number) => {
     setCoords({ lat, lon });
@@ -224,20 +226,26 @@ export default function HeatPage() {
   };
   const askLocation = () => {
     setLocationRequested(true);
+    setLocatedAt(null); setCoords(null); setLive(null); setWater(null);
     if (!("geolocation" in navigator)) return;
     navigator.geolocation.getCurrentPosition(
-      (pos) => { setSelectedArea(""); load(Math.round(pos.coords.latitude * 100) / 100, Math.round(pos.coords.longitude * 100) / 100); },
+      (pos) => {
+        if (!Number.isFinite(pos.coords.accuracy) || pos.coords.accuracy > 2000 || pos.timestamp > Date.now() + 60000 || Date.now() - pos.timestamp > 15 * 60 * 1000) return;
+        setLocatedAt(pos.timestamp);
+        load(Math.round(pos.coords.latitude * 100) / 100, Math.round(pos.coords.longitude * 100) / 100);
+      },
       () => { setCoords(null); setWater(null); setLive(null); },
-      { timeout: 6000, maximumAge: 600000 }
+      { timeout: 10000, maximumAge: 0, enableHighAccuracy: true }
     );
   };
+  const locationReady = !!(coords && locatedAt && clock - locatedAt < 15 * 60 * 1000);
   const fresh = (at?: string | null) => {
     if (!at) return false;
     const time = Date.parse(at.endsWith("Z") ? at : `${at}Z`);
     return Number.isFinite(time) && checkedAt !== null && checkedAt >= time && checkedAt - time <= 2 * 60 * 60 * 1000;
   };
-  const weatherOk = !!live && fresh(live.weatherAt) && live.tempC != null;
-  const aqiOk = !!live && fresh(live.aqiAt) && live.aqi != null;
+  const weatherOk = locationReady && !!live && fresh(live.weatherAt) && live.tempC != null;
+  const aqiOk = locationReady && !!live && fresh(live.aqiAt) && live.aqi != null;
   const level: Tone = weatherOk ? live!.level : "safe";
   const metrics: HeatMetric[] = [];
   if (aqiOk) { const tone = aqiTone(live!.aqi!); metrics.push({ id: "aqi", label: t("heat.m.aqi"), value: String(live!.aqi), tone, cat: t(TONE_KEY[tone]) }); }
@@ -261,7 +269,7 @@ export default function HeatPage() {
     }
   };
   // Only mapped amenities after location permission; never show sample pins.
-  const allPoints: SattuPoint[] = water
+  const allPoints: SattuPoint[] = locationReady && water
     ? water.map((p) => ({
         name: p.name || catLabel(p.category),
         dist: `${p.distKm} km`,
@@ -275,7 +283,7 @@ export default function HeatPage() {
   const shown = cat === "all" ? allPoints : allPoints.filter((p) => (p.category || "water") === cat);
 
   const handleAddSpot = async () => {
-    if (!coords || !addName.trim()) return;
+    if (!locationReady || !coords || !addName.trim()) return;
     const ok = await addWaterPoint(coords.lat, coords.lon, addName.trim(), addCat);
     if (ok) {
       const db = await fetchNearbyWaterPoints(coords.lat, coords.lon);
@@ -339,21 +347,11 @@ export default function HeatPage() {
         <div style={{ padding: "18px 20px 0" }}>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 11 }}>
             <span style={{ fontWeight: 700, fontSize: 12, letterSpacing: ".7px", textTransform: "uppercase", color: G.faint }}>{t("heat.amenities")}</span>
-            <span style={{ fontSize: 11.5, fontWeight: 700, color: G.green700 }}>{coords ? selectedArea ? `${shown.length} ${t("heat.mapped")}` : `${shown.length} ${t("heat.nearby")}` : t("heat.chooseArea")}</span>
+            <span style={{ fontSize: 11.5, fontWeight: 700, color: G.green700 }}>{locationReady ? `${shown.length} ${t("heat.nearby")}` : t("heat.chooseArea")}</span>
           </div>
 
-          <select aria-label={t("heat.selectArea")} value={selectedArea} onChange={e => {
-            const id = e.target.value; setSelectedArea(id);
-            const area = ZONES.find(z => z.id === id);
-            if (area) load((area.lat[0] + area.lat[1]) / 2, (area.lon[0] + area.lon[1]) / 2);
-            else { setCoords(null); setWater(null); setLive(null); }
-          }} style={{ width: "100%", minHeight: 42, borderRadius: 9, padding: 8, marginBottom: 8 }}>
-            <option value="">{t("heat.selectArea")}</option>
-            {ZONES.map(z => <option key={z.id} value={z.id}>{z.label}</option>)}
-          </select>
-          {selectedArea && <p style={{ fontSize: 11, color: G.muted }}>{t("heat.areaNotNearby")}</p>}
-          {!coords && <button onClick={askLocation} style={{ width: "100%", padding: 12, marginBottom: 12, borderRadius: 12, border: `1px solid ${G.green100}`, background: G.green50, color: G.green700, fontWeight: 700 }}>{t("heat.allowLocation")}</button>}
-          {locationRequested && !coords && <p style={{ color: G.muted, fontSize: 12 }}>{t("heat.locationDenied")}</p>}
+          {!locationReady && <button onClick={askLocation} style={{ width: "100%", minHeight: 48, padding: "11px 14px", marginBottom: 12, borderRadius: 12, border: `1px solid ${G.green100}`, background: G.green50, color: G.green700, fontWeight: 700, cursor: "pointer" }}>{t("heat.allowLocation")}</button>}
+          {locationRequested && !locationReady && <p style={{ color: G.muted, fontSize: 12 }}>{t("heat.locationDenied")}</p>}
           {/* Category filter chips */}
           <div className="noscroll" style={{ display: "flex", gap: 7, overflowX: "auto", paddingBottom: 11, marginBottom: 1 }}>
             {["all", ...AMEN_CATS].map((c) => {
@@ -370,10 +368,10 @@ export default function HeatPage() {
           {shown.length > 0 ? (
             <WaterMap key={cat} points={shown} />
           ) : (
-            <div style={{ fontSize: 13, color: G.muted, padding: "16px", background: G.surface, borderRadius: 14, border: `1px solid ${G.line}`, textAlign: "center" }}>{coords ? t("heat.noMapped") : t("heat.chooseArea")}</div>
+            <div style={{ fontSize: 13, color: G.muted, padding: "16px", background: G.surface, borderRadius: 14, border: `1px solid ${G.line}`, textAlign: "center" }}>{locationReady ? t("heat.noMapped") : t("heat.chooseArea")}</div>
           )}
 
-          {supabaseConfigured() && coords && (
+          {supabaseConfigured() && locationReady && coords && (
             addOpen ? (
               <div style={{ marginTop: 10, padding: "14px", borderRadius: 14, background: G.surface, border: `1.5px solid ${G.green}` }}>
                 <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 11 }}>
