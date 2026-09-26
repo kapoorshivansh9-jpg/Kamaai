@@ -152,10 +152,10 @@ export default function HomePage() {
                 {t("home.heroSub")}
               </p>
               <Link
-                href="/shifts"
+                href="/onboarding"
                 style={{
                   display:"inline-flex", alignItems:"center", gap:8,
-                  padding:"13px 22px", borderRadius:14,
+                  minHeight:48, padding:"13px 22px", borderRadius:14,
                   background:"#fff", color:G.green700,
                   fontWeight:700, fontSize:15, textDecoration:"none",
                   boxShadow:"0 4px 20px rgba(0,0,0,.18)",
@@ -174,6 +174,14 @@ export default function HomePage() {
           <path d="M0 0 Q120 18 240 9 Q360 0 480 14 L480 18 L0 18 Z" fill={G.bg} />
         </svg>
       </div>
+
+      {!loading && !profile && (
+        <section style={{ margin:"20px 18px 0", padding:"18px", borderRadius:18, background:G.surface, border:`1px solid ${G.line}` }}>
+          <h2 style={{ margin:"0 0 8px", fontSize:18, color:G.ink }}>{t("home.howTitle")}</h2>
+          <p style={{ margin:"0 0 12px", fontSize:13, lineHeight:1.5, color:G.muted }}>{t("home.howBody")}</p>
+          <Link href="/onboarding" style={{ display:"inline-flex", alignItems:"center", justifyContent:"center", minHeight:44, padding:"10px 16px", borderRadius:12, background:G.greenDark, color:"#fff", fontSize:14, fontWeight:700, textDecoration:"none" }}>{t("home.startForm")} <ArrowRight size={16} style={{ marginLeft:8 }} /></Link>
+        </section>
+      )}
 
       {/* ── FEATURES ─────────────────────────────────── */}
       <div style={{ padding:"24px 18px 0", flex:1 }}>

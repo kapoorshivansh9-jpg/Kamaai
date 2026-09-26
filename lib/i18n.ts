@@ -34,7 +34,7 @@ const en = {
   "home.kicker": "Gig workers · Delhi NCR",
   "home.heroTitle1": "Ride smart.", "home.heroTitle2": "Earn more.",
   "home.heroSub": "Plan shifts, find water and understand your rights.",
-  "home.cta": "See a sample shift plan",
+  "home.cta": "Start with the form", "home.howTitle": "What RideKamao does", "home.howBody": "Choose your work and add your email in a short form. Your plan saves on this device. Give live location to see shift recommendations; use the tools below for earnings, heat safety and rights. Live demand data is not available.", "home.startForm": "Open the form",
   "home.features": "Features",
   "home.f.shift": "Shift Planner", "home.f.shiftDesc": "Best windows to ride today", "home.f.shiftTag": "Plan preview",
   "home.f.heat": "Heat Safety", "home.f.heatDesc": "Weather readings · mapped amenities · safety tips", "home.f.heatTag": "Safety tips",
@@ -42,7 +42,7 @@ const en = {
   "home.tip": "Plan preview · live demand not available",
   "common.rider": "Rider", "common.ncr": "Delhi NCR",
 
-  "shifts.loading": "Loading plan…", "shifts.noVerifiedSpots": "No nearby mapped places are available. We will not guess where to go.", "shifts.guestTitle": "Preview a shift plan", "shifts.chooseGig": "What work do you do?", "shifts.chooseArea": "Choose an area", "shifts.guestNote": "Choose your work, then allow live GPS for local recommendations. This is a template, not live demand.", "shifts.savePlan": "Set up a saved plan", "shifts.localOnly": "A local plan stays on this phone; it does not sync to another device.", "shifts.previewNote": "Example plan only. Work, demand and earnings are not guaranteed.", "shifts.estimateDisclaimer": "Template-based estimates, not real earnings data.", "shifts.areaPlan": "Example plan for", "shifts.estimatedRate": "estimated/hour", "shifts.template": "ESTIMATE",
+  "shifts.loading": "Loading plan…", "shifts.noVerifiedSpots": "No nearby mapped places are available. We will not guess where to go.", "shifts.guestTitle": "Preview a shift plan", "shifts.chooseGig": "What work do you do?", "shifts.chooseArea": "Choose an area", "shifts.guestNote": "Choose your work, then allow live GPS for local recommendations. This is a template, not live demand.", "shifts.savePlan": "Set up a saved plan", "shifts.localOnly": "A local plan stays on this phone; it does not sync to another device.", "shifts.previewNote": "Example plan only. Work, demand and earnings are not guaranteed.", "shifts.regionalNote": "Location received, but outside the named areas. This is the original Delhi NCR example plan, not nearby recommendations.", "shifts.estimateDisclaimer": "Template-based estimates, not real earnings data.", "shifts.areaPlan": "Example plan for", "shifts.estimatedRate": "estimated/hour", "shifts.template": "ESTIMATE",
   // shifts
   "shifts.title": "Shift Planner",
   "loc.locating": "Locating…", "loc.located": "Located", "loc.ncr": "Delhi NCR",
@@ -131,7 +131,7 @@ const hi: Record<Key, string> = {
   "home.kicker": "गिग वर्कर · दिल्ली NCR",
   "home.heroTitle1": "स्मार्ट चलाओ।", "home.heroTitle2": "ज़्यादा कमाओ।",
   "home.heroSub": "शिफ्ट का प्लान देखें, पानी की जगहें खोजें और अपने हक़ जानें।",
-  "home.cta": "नमूना शिफ्ट प्लान देखें",
+  "home.cta": "फ़ॉर्म से शुरू करें", "home.howTitle": "RideKamao क्या करता है", "home.howBody": "छोटे फ़ॉर्म में काम चुनें और ईमेल भरें। आपका प्लान इसी फ़ोन पर सेव होगा। शिफ्ट सुझावों के लिए लाइव लोकेशन दें। नीचे कमाई, गर्मी सुरक्षा और अधिकारों के टूल हैं। लाइव मांग का डेटा उपलब्ध नहीं है।", "home.startForm": "फ़ॉर्म खोलें",
   "home.features": "फ़ीचर",
   "home.f.shift": "शिफ्ट प्लानर", "home.f.shiftDesc": "आज चलाने की सबसे अच्छी विंडो", "home.f.shiftTag": "प्लान का नमूना",
   "home.f.heat": "गर्मी सुरक्षा", "home.f.heatDesc": "मौसम की रीडिंग · मैप की सुविधाएँ · सुरक्षा सुझाव", "home.f.heatTag": "सुरक्षा सुझाव",
@@ -139,7 +139,7 @@ const hi: Record<Key, string> = {
   "home.tip": "प्लान का नमूना · लाइव मांग उपलब्ध नहीं",
   "common.rider": "राइडर", "common.ncr": "दिल्ली NCR",
 
-  "shifts.loading": "प्लान खुल रहा है…", "shifts.noVerifiedSpots": "पास में मैप पर दर्ज जगहें उपलब्ध नहीं हैं। हम जगह का अनुमान नहीं लगाएंगे।", "shifts.guestTitle": "शिफ्ट प्लान का नमूना देखें", "shifts.chooseGig": "आप किस तरह का काम करते हैं?", "shifts.chooseArea": "इलाका चुनें", "shifts.guestNote": "काम चुनें और स्थानीय सुझावों के लिए लाइव GPS दें। यह लाइव मांग नहीं है।", "shifts.savePlan": "सेव किया प्लान बनाएं", "shifts.localOnly": "सेव किया प्लान इसी फ़ोन पर रहेगा; दूसरे फ़ोन पर अपने आप नहीं आएगा।", "shifts.previewNote": "यह सिर्फ़ नमूना है। काम, मांग या कमाई की गारंटी नहीं है।", "shifts.estimateDisclaimer": "नमूने पर आधारित अनुमान, असली कमाई का डेटा नहीं।", "shifts.areaPlan": "इसके लिए नमूना प्लान:", "shifts.estimatedRate": "अनुमान/घंटा", "shifts.template": "अनुमान",
+  "shifts.loading": "प्लान खुल रहा है…", "shifts.noVerifiedSpots": "पास में मैप पर दर्ज जगहें उपलब्ध नहीं हैं। हम जगह का अनुमान नहीं लगाएंगे।", "shifts.guestTitle": "शिफ्ट प्लान का नमूना देखें", "shifts.chooseGig": "आप किस तरह का काम करते हैं?", "shifts.chooseArea": "इलाका चुनें", "shifts.guestNote": "काम चुनें और स्थानीय सुझावों के लिए लाइव GPS दें। यह लाइव मांग नहीं है।", "shifts.savePlan": "सेव किया प्लान बनाएं", "shifts.localOnly": "सेव किया प्लान इसी फ़ोन पर रहेगा; दूसरे फ़ोन पर अपने आप नहीं आएगा।", "shifts.previewNote": "यह सिर्फ़ नमूना है। काम, मांग या कमाई की गारंटी नहीं है।", "shifts.regionalNote": "लोकेशन मिल गई, लेकिन तय इलाकों से बाहर है। यह दिल्ली NCR का नमूना प्लान है, आस-पास के सुझाव नहीं।", "shifts.estimateDisclaimer": "नमूने पर आधारित अनुमान, असली कमाई का डेटा नहीं।", "shifts.areaPlan": "इसके लिए नमूना प्लान:", "shifts.estimatedRate": "अनुमान/घंटा", "shifts.template": "अनुमान",
   "shifts.title": "शिफ्ट प्लानर",
   "loc.locating": "ढूँढ रहे हैं…", "loc.located": "मिल गया", "loc.ncr": "दिल्ली NCR",
   "loc.promptTitle": "लोकेशन चालू करें", "loc.promptSub": "स्थानीय सुझावों के लिए ताज़ा और सटीक लोकेशन चाहिए। इसके बिना सुझाव नहीं दिखेंगे।", "loc.enable": "चालू करें",

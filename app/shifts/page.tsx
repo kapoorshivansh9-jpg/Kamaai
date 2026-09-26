@@ -266,8 +266,8 @@ function DetailPanel({ d, reason, tag, areas, spots, windowId, fb, isMidday }: {
   const flat = spots.slice(0, 5);
   return (
     <div style={{ padding: "14px 16px 16px", borderTop: `1px solid ${G.line2}`, background: `${tag.bg}40`, animation: "rk-fadeUp .25s both" }}>
-      {/* Only show a position when nearby mapped places support it. */}
-      {areas.length > 0 || flat.length > 0 ? <div style={{ display: "flex", gap: 10, alignItems: "flex-start", padding: "10px 12px", borderRadius: 12, background: G.green, marginBottom: 12 }}>
+      {/* Original playbook details, shown only after GPS is granted. */}
+      <div style={{ display: "flex", gap: 10, alignItems: "flex-start", padding: "10px 12px", borderRadius: 12, background: G.green, marginBottom: 12 }}>
         <Target size={15} color="#fff" style={{ flexShrink: 0, marginTop: 1 }} />
         <div>
           <div style={{ fontSize: 9.5, fontWeight: 800, letterSpacing: ".7px", textTransform: "uppercase", color: "rgba(255,255,255,.7)", marginBottom: 2 }}>{t("d.whereToBe")}</div>
@@ -275,8 +275,6 @@ function DetailPanel({ d, reason, tag, areas, spots, windowId, fb, isMidday }: {
         </div>
       </div>
 
-
-      : null}
 
       {/* Why now — the earning reason */}
       <div style={{ display: "flex", gap: 8, alignItems: "flex-start", marginBottom: 14 }}>
@@ -306,7 +304,7 @@ function DetailPanel({ d, reason, tag, areas, spots, windowId, fb, isMidday }: {
             ))
           : flat.length > 0
             ? flat.map((s, i) => <SpotRow key={i} href={dirUrl(s.lat, s.lon)} title={s.name} sub={`${s.kind} · ${s.distKm} km`} />)
-            : <p style={{ margin: 0, fontSize: 12, color: G.muted }}>{t("shifts.noVerifiedSpots")}</p>}
+            : d.hotspots.map((h, i) => <HotspotRow key={i} h={h} />)}
       </div>
 
       {/* Money tip */}
@@ -365,7 +363,8 @@ function WindowCard({ w, idx, isAvoid, active, spots, areas, areaName, zoneId, c
     const netVotes = st ? st.busy - st.quiet : 0;
     return a.spots.length * 2 + netVotes * 1.5 - a.distKm * 0.4;
   };
-  winAreas = [...winAreas].sort((x, y) => areaScore(y) - areaScore(x));
+  const HEATS = ["peak", "high", "good"] as const;
+  winAreas = [...winAreas].sort((x, y) => areaScore(y) - areaScore(x)).map((a, i) => ({ ...a, heat: HEATS[Math.min(i, 2)] }));
   const isMidday = false; // No fixed-time heat warning without observed local conditions
 
   if (isAvoid) {
@@ -455,8 +454,6 @@ export default function ShiftsPage() {
   const lang = useLang();
   const [zone, setZone] = useState<Zone | null>(null);
   const [coords, setCoords] = useState<{ lat: number; lon: number } | null>(null);
-  const [locatedAt, setLocatedAt] = useState<number | null>(null);
-  const [clock, setClock] = useState(Date.now());
   const [spots, setSpots] = useState<Spot[]>([]);
   const [areas, setAreas] = useState<Area[]>([]);
   const [traffic, setTraffic] = useState<{ level: "light" | "moderate" | "heavy" } | null>(null);
@@ -464,22 +461,19 @@ export default function ShiftsPage() {
   const [voted, setVoted] = useState<Set<string>>(new Set());
   const [locationStatus, setLocationStatus] = useState<"idle" | "requesting" | "granted" | "denied">("idle");
 
-  useEffect(() => { const id = window.setInterval(() => setClock(Date.now()), 60000); return () => window.clearInterval(id); }, []);
-
-  // Only a recent, reasonably accurate browser fix can drive local recommendations.
+  // Gate the existing recommendation plan until the browser supplies a location.
   const askLocation = () => {
-    setCoords(null); setLocatedAt(null); setZone(null); setSpots([]); setAreas([]); setTraffic(null);
+    setCoords(null); setZone(null); setSpots([]); setAreas([]); setTraffic(null);
     if (!("geolocation" in navigator)) { setLocationStatus("denied"); return; }
     setLocationStatus("requesting");
     navigator.geolocation.getCurrentPosition(
       (pos) => {
         const lat = pos.coords.latitude, lon = pos.coords.longitude;
-        if (!Number.isFinite(pos.coords.accuracy) || pos.coords.accuracy > 2000 || pos.timestamp > Date.now() + 60000 || Date.now() - pos.timestamp > 15 * 60 * 1000 || !detectZone(lat, lon)) {
+        if (!Number.isFinite(lat) || !Number.isFinite(lon) || pos.timestamp > Date.now() + 60000 || Date.now() - pos.timestamp > 15 * 60 * 1000) {
           setLocationStatus("denied"); return;
         }
         setZone(detectZone(lat, lon));
         setCoords({ lat: Math.round(lat * 100) / 100, lon: Math.round(lon * 100) / 100 });
-        setLocatedAt(pos.timestamp);
         setLocationStatus("granted");
       },
       () => setLocationStatus("denied"),
@@ -507,7 +501,7 @@ export default function ShiftsPage() {
 
   // Pull real nearby places for THIS gig type from OpenStreetMap (/api/hotspots).
   useEffect(() => {
-    if (!coords || !locatedAt || Date.now() - locatedAt >= 15 * 60 * 1000 || (!profile && !guestProfession)) return;
+    if (!coords || (!profile && !guestProfession)) return;
     let cancelled = false;
     fetch(`/api/hotspots?lat=${coords.lat}&lon=${coords.lon}&prof=${profile?.profession ?? guestProfession}`)
       .then((r) => r.json())
@@ -523,14 +517,14 @@ export default function ShiftsPage() {
       .then((j) => { if (!cancelled && j?.available) setTraffic({ level: j.level }); })
       .catch(() => { /* no traffic signal */ });
     return () => { cancelled = true; };
-  }, [profile, guestProfession, coords, locatedAt]);
+  }, [profile, guestProfession, coords]);
 
   if (loading) return <div style={{ padding: 24 }}>{t("shifts.loading")}</div>;
   const profession = profile?.profession ?? guestProfession;
   const guest = !profile;
 
   const now = new Date();
-  const locationReady = !!(coords && zone && locatedAt && clock - locatedAt < 15 * 60 * 1000);
+  const locationReady = !!coords && locationStatus === "granted";
   const allWindows = profession && locationReady ? windowsFor(profession, zone, now, lang) : [];
   const avoidWindow = allWindows.find((w) => w.tag === "avoid");
   const rideWindows = allWindows.filter((w) => w.tag !== "avoid");
@@ -604,7 +598,7 @@ export default function ShiftsPage() {
       )}
 
 
-      {profession && locationReady && <div style={{ margin: "14px 20px 0", fontSize: 12, color: G.muted }}>{t("shifts.previewNote")}</div>}
+      {profession && locationReady && <div style={{ margin: "14px 20px 0", fontSize: 12, color: G.muted }}>{zone ? t("shifts.previewNote") : t("shifts.regionalNote")}</div>}
       {/* Zone note */}
       {zone && profession && locationReady && (
         <div style={{ margin: "14px 20px 0", padding: "10px 14px", borderRadius: 12, background: G.green50, border: `1px solid ${G.green100}`, display: "flex", alignItems: "center", gap: 8 }}>
