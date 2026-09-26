@@ -299,7 +299,7 @@ export default function OnboardingPage() {
                     </div>
                   )}
 
-                  <PrimaryBtn onClick={() => setGenerating(true)} disabled={!/.+@.+\..+/.test(email)}>
+                  <PrimaryBtn onClick={() => setGenerating(true)} disabled={!!email && !/.+@.+\..+/.test(email)}>
                     {tr(lang, "ob.buildPlan")} <ArrowRight size={18} />
                   </PrimaryBtn>
                 </>

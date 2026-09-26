@@ -54,6 +54,8 @@ export async function GET(request: Request) {
   let humidity: number | null = null;
   let uv: number | null = null;
   let aqi: number | null = null;
+  let weatherAt: string | null = null;
+  let aqiAt: string | null = null;
 
   try {
     const [wRes, aRes] = await Promise.all([
@@ -63,6 +65,7 @@ export async function GET(request: Request) {
     if (wRes.ok) {
       const w = await wRes.json();
       const c = w?.current ?? {};
+      weatherAt = typeof c.time === "string" ? c.time : null;
       tempC = typeof c.temperature_2m === "number" ? c.temperature_2m : null;
       feelsLikeC = typeof c.apparent_temperature === "number" ? c.apparent_temperature : null;
       humidity = typeof c.relative_humidity_2m === "number" ? c.relative_humidity_2m : null;
@@ -71,6 +74,7 @@ export async function GET(request: Request) {
     if (aRes.ok) {
       const a = await aRes.json();
       const cur = a?.current ?? {};
+      aqiAt = typeof cur.time === "string" ? cur.time : null;
       // Prefer India CPCB AQI (matches Indian sites); fall back to US AQI.
       aqi = indianAqi(
         typeof cur.pm2_5 === "number" ? cur.pm2_5 : null,
@@ -84,7 +88,7 @@ export async function GET(request: Request) {
   if (tempC == null && aqi == null) return Response.json({ live: false });
 
   const feels = feelsLikeC ?? tempC ?? 0;
-  const data = { live: true, tempC, feelsLikeC: feels, humidity, aqi, uv, level: levelFromFeels(feels) };
+  const data = { live: true, tempC, feelsLikeC: feels, humidity, aqi, uv, level: levelFromFeels(feels), weatherAt, aqiAt, source: "Open-Meteo", area: { lat, lon } };
   cache.set(ck, { at: Date.now(), data });
   return Response.json(data);
 }

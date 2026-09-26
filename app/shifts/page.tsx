@@ -1,10 +1,10 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { useRouter } from "next/navigation";
-import { MapPin, AlertTriangle, TrendingUp, Clock, Target, Zap, Navigation, Lightbulb, ChevronDown } from "lucide-react";
+import Link from "next/link";
+import { MapPin, AlertTriangle, Target, Zap, Navigation, Lightbulb, ChevronDown } from "lucide-react";
 import { useProfile } from "@/lib/ridekamao-profile";
-import { windowsFor, detectZone, isWindowActive } from "@/lib/ridekamao-data";
+import { windowsFor, detectZone, isWindowActive, ZONES, PROFESSIONS } from "@/lib/ridekamao-data";
 import { trackEvent, submitSpotFeedback, fetchZoneStats, type ZoneStat } from "@/lib/supabase-events";
 import { useT, useLang, profTitle, localeTag } from "@/lib/i18n";
 import type { ShiftWindow, Zone, Hotspot } from "@/lib/ridekamao-data";
@@ -24,17 +24,6 @@ const TAG = {
   avoid:  { bg: G.redBg,   ink: G.redInk,    bar: `linear-gradient(90deg,${G.red},#7A0000)`,  border: G.red },
 };
 
-const RISK_COLORS = ["#1E9C47", "#D97B00", "#D45C00", "#C93B35"];
-
-function NowBadge() {
-  const t = useT();
-  return (
-    <span style={{ display: "inline-flex", alignItems: "center", gap: 5, padding: "2px 9px", borderRadius: 100, background: G.green, color: "#fff", fontSize: 10, fontWeight: 800, letterSpacing: ".6px", boxShadow: "0 4px 10px -3px rgba(10,144,96,.55)" }}>
-      <span style={{ width: 5, height: 5, borderRadius: "50%", background: "#9BF0CE", display: "inline-block", animation: "rk-pulse 1.4s infinite" }} />
-      {t("shifts.now")}
-    </span>
-  );
-}
 
 const HEAT_CHIP: Record<"peak" | "high" | "good", { bg: string; ink: string; key: "d.peak" | "d.high" | "d.good" }> = {
   peak: { bg: G.amberBg, ink: G.amberInk, key: "d.peak" },
@@ -197,7 +186,7 @@ function SpotRow({ href, title, sub }: { href: string; title: string; sub: strin
   );
 }
 
-type Feedback = { stats: Record<string, ZoneStat> | null; voted: Set<string>; vote: (zone: string, windowId: string, busy: boolean) => void };
+type Feedback = { canVote: boolean; stats: Record<string, ZoneStat> | null; voted: Set<string>; vote: (zone: string, windowId: string, busy: boolean) => void };
 
 function ZoneRow({ zone, windowId, fb, distKm, heat }: { zone: string; windowId: string; fb: Feedback; distKm?: number; heat?: "peak" | "high" | "good" }) {
   const t = useT();
@@ -224,7 +213,7 @@ function ZoneRow({ zone, windowId, fb, distKm, heat }: { zone: string; windowId:
           <div style={{ fontSize: 11, color: votes > 0 && stat!.score >= 0.6 ? G.green700 : G.muted, marginTop: 2, lineHeight: 1.4, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{badge}</div>
         </div>
       </a>
-      {voted ? (
+      {!fb.canVote ? null : voted ? (
         <span style={{ fontSize: 11, fontWeight: 800, color: G.green700, flexShrink: 0 }}>✓ {t("fb.thanks")}</span>
       ) : (
         <>
@@ -376,7 +365,7 @@ function WindowCard({ w, idx, isAvoid, active, spots, areas, areaName, zoneId, c
     return a.spots.length * 2 + netVotes * 1.5 - a.distKm * 0.4;
   };
   winAreas = [...winAreas].sort((x, y) => areaScore(y) - areaScore(x)).map((a, i) => ({ ...a, heat: HEATS[Math.min(i, 2)] }));
-  const isMidday = w.startH < 15 && w.endH > 12; // overlaps the 12–3 PM peak-heat window
+  const isMidday = false; // No fixed-time heat warning without observed local conditions
 
   if (isAvoid) {
     return (
@@ -388,7 +377,7 @@ function WindowCard({ w, idx, isAvoid, active, spots, areas, areaName, zoneId, c
           <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 3 }}>
             <span style={{ fontWeight: 800, fontSize: 14, color: G.redInk, fontVariantNumeric: "tabular-nums" }}>{w.time}</span>
             <span style={{ padding: "2px 8px", borderRadius: 6, fontSize: 10.5, fontWeight: 700, background: G.red, color: "#fff" }}>{t("shifts.avoidBadge")}</span>
-            {active && <span style={{ padding: "2px 8px", borderRadius: 6, fontSize: 10.5, fontWeight: 700, background: G.surface, color: G.redInk }}>{t("shifts.rightNow")}</span>}
+
           </div>
           <p style={{ margin: 0, fontSize: 12.5, lineHeight: 1.45, color: G.redInk }}>{w.reason}</p>
         </div>
@@ -420,7 +409,7 @@ function WindowCard({ w, idx, isAvoid, active, spots, areas, areaName, zoneId, c
           {/* Time — big and bold */}
           <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
             <span style={{ fontWeight: 800, fontSize: 18, color: G.ink, fontVariantNumeric: "tabular-nums", letterSpacing: "-.4px", lineHeight: 1.1 }}>{w.time}</span>
-            {active && <NowBadge />}
+
           </div>
           <div style={{ fontSize: 12, color: G.muted, marginTop: 3, fontWeight: 600 }}>{w.label}</div>
         </div>
@@ -428,7 +417,7 @@ function WindowCard({ w, idx, isAvoid, active, spots, areas, areaName, zoneId, c
         {/* Rate */}
         <div style={{ textAlign: "right", flexShrink: 0 }}>
           <div style={{ fontWeight: 800, fontSize: 20, color: G.green700, fontVariantNumeric: "tabular-nums", letterSpacing: "-.5px", lineHeight: 1 }}>₹{w.rphr}</div>
-          <div style={{ fontSize: 10, color: G.faint, fontWeight: 700, marginTop: 3, textTransform: "uppercase", letterSpacing: ".4px" }}>{t("shifts.perHour")}</div>
+          <div style={{ fontSize: 10, color: G.faint, fontWeight: 700, marginTop: 3, textTransform: "uppercase", letterSpacing: ".4px" }}>{t("shifts.estimatedRate")}</div>
         </div>
 
         <ChevronDown size={18} color={G.faint} style={{ flexShrink: 0, transition: "transform .25s", transform: open ? "rotate(180deg)" : "none" }} />
@@ -439,7 +428,7 @@ function WindowCard({ w, idx, isAvoid, active, spots, areas, areaName, zoneId, c
         <div style={{ flex: 1, height: 5, borderRadius: 3, background: G.line2, overflow: "hidden" }}>
           <div style={{ width: `${w.demand * 100}%`, height: "100%", borderRadius: 3, background: tag.bar, transition: "width .8s cubic-bezier(.4,0,.2,1)" }} />
         </div>
-        <span style={{ padding: "3px 9px", borderRadius: 7, fontSize: 10.5, fontWeight: 700, background: tag.bg, color: tag.ink, flexShrink: 0, letterSpacing: ".2px" }}>{w.tagText}</span>
+        <span style={{ padding: "3px 9px", borderRadius: 7, fontSize: 10.5, fontWeight: 700, background: tag.bg, color: tag.ink, flexShrink: 0, letterSpacing: ".2px" }}>{t("shifts.template")}</span>
       </div>
 
       {!open && (
@@ -459,8 +448,8 @@ function WindowCard({ w, idx, isAvoid, active, spots, areas, areaName, zoneId, c
 }
 
 export default function ShiftsPage() {
-  const router = useRouter();
   const { profile, loading } = useProfile();
+  const [guestProfession, setGuestProfession] = useState("");
   const t = useT();
   const lang = useLang();
   const [zone, setZone] = useState<Zone | null>(null);
@@ -471,10 +460,6 @@ export default function ShiftsPage() {
   const [zoneStats, setZoneStats] = useState<Record<string, ZoneStat> | null>(null);
   const [voted, setVoted] = useState<Set<string>>(new Set());
   const [locationStatus, setLocationStatus] = useState<"idle" | "requesting" | "granted" | "denied">("idle");
-
-  useEffect(() => {
-    if (!loading && !profile) router.push("/onboarding");
-  }, [loading, profile]);
 
   // Ask for location — callable on mount AND from the "Enable location" button.
   const askLocation = () => {
@@ -495,7 +480,6 @@ export default function ShiftsPage() {
   useEffect(() => {
     if (!profile) return;
     trackEvent({ type: "shift_plan_viewed", profession: profile.profession, language: profile.language });
-    askLocation();
   }, [profile]);
 
   // Load this rider's past votes (one vote per zone, per device).
@@ -513,9 +497,9 @@ export default function ShiftsPage() {
 
   // Pull real nearby places for THIS gig type from OpenStreetMap (/api/hotspots).
   useEffect(() => {
-    if (!profile || !coords) return;
+    if (!coords || (!profile && !guestProfession)) return;
     let cancelled = false;
-    fetch(`/api/hotspots?lat=${coords.lat}&lon=${coords.lon}&prof=${profile.profession}`)
+    fetch(`/api/hotspots?lat=${coords.lat}&lon=${coords.lon}&prof=${profile?.profession ?? guestProfession}`)
       .then((r) => r.json())
       .then((j) => {
         if (cancelled) return;
@@ -529,12 +513,14 @@ export default function ShiftsPage() {
       .then((j) => { if (!cancelled && j?.available) setTraffic({ level: j.level }); })
       .catch(() => { /* no traffic signal */ });
     return () => { cancelled = true; };
-  }, [profile, coords]);
+  }, [profile, guestProfession, coords]);
 
-  if (loading || !profile) return null;
+  if (loading) return <div style={{ padding: 24 }}>{t("shifts.loading")}</div>;
+  const profession = profile?.profession ?? guestProfession;
+  const guest = !profile;
 
   const now = new Date();
-  const allWindows = windowsFor(profile.profession, zone, now, lang);
+  const allWindows = profession ? windowsFor(profession, zone, now, lang) : [];
   const avoidWindow = allWindows.find((w) => w.tag === "avoid");
   const rideWindows = allWindows.filter((w) => w.tag !== "avoid");
   const areaLabel = zone ? zone.label : t("common.ncr");
@@ -551,19 +537,30 @@ export default function ShiftsPage() {
       s.score = s.busy / Math.max(1, s.busy + s.quiet);
       next[zone] = s; return next;
     });
-    submitSpotFeedback({ zone, profession: profile.profession, windowId, busy });
+    if (profile) submitSpotFeedback({ zone, profession, windowId, busy });
   };
-  const feedback: Feedback = { stats: zoneStats, voted, vote };
+  const feedback: Feedback = { canVote: !guest, stats: zoneStats, voted, vote };
 
   const dateStr = now.toLocaleDateString(localeTag(lang), { weekday: "long", day: "numeric", month: "long" });
 
-  const hoursArr = [3, 3.5, 1.5, 2, 3, 3.5, 2.5];
-  const todayTotal = Math.round(
-    rideWindows.slice(0, 3).reduce((s, w, i) => s + w.rphr * (hoursArr[i] ?? 2), 0)
-  );
-
   return (
     <div style={{ background: G.bg, minHeight: "100%", paddingBottom: 24 }}>
+      <div style={{ margin: "18px 20px 0", padding: 16, background: G.surface, borderRadius: 16, border: `1px solid ${G.line}` }}>
+        <div style={{ fontWeight: 800, color: G.ink, marginBottom: 8 }}>{guest ? t("shifts.guestTitle") : t("shifts.chooseArea")}</div>
+        {guest && <><label style={{ display: "block", fontSize: 12, color: G.muted, marginBottom: 4 }}>{t("shifts.chooseGig")}</label>
+        <select aria-label={t("shifts.chooseGig")} value={guestProfession} onChange={e => setGuestProfession(e.target.value)} style={{ width: "100%", minHeight: 42, borderRadius: 9, marginBottom: 12, padding: 8 }}>
+          <option value="">{t("shifts.chooseGig")}</option>
+          {PROFESSIONS.map(p => <option value={p.id} key={p.id}>{profTitle(p.id, lang)}</option>)}
+        </select></>}
+        <label style={{ display: "block", fontSize: 12, color: G.muted, marginBottom: 4 }}>{t("shifts.chooseArea")}</label>
+        <select aria-label={t("shifts.chooseArea")} value={zone?.id ?? ""} onChange={e => { setZone(ZONES.find(z => z.id === e.target.value) ?? null); setCoords(null); setSpots([]); setAreas([]); setTraffic(null); }} style={{ width: "100%", minHeight: 42, borderRadius: 9, padding: 8 }}>
+          <option value="">{t("shifts.chooseArea")}</option>
+          {ZONES.map(z => <option value={z.id} key={z.id}>{z.label}</option>)}
+        </select>
+        {guest && <><p style={{ fontSize: 12, lineHeight: 1.5, color: G.muted }}>{t("shifts.guestNote")}</p>
+        <Link href="/onboarding" style={{ color: G.green700, fontWeight: 700 }}>{t("shifts.savePlan")}</Link>
+        <p style={{ fontSize: 11, color: G.muted }}>{t("shifts.localOnly")}</p></>}
+      </div>
       {/* Header */}
       <div style={{ padding: "24px 20px 0" }}>
         <div style={{ fontSize: 12.5, color: G.muted, fontWeight: 600, marginBottom: 4 }}>{dateStr}</div>
@@ -573,7 +570,7 @@ export default function ShiftsPage() {
               {t("shifts.title")}
             </h1>
             <div style={{ marginTop: 4, fontSize: 13, color: G.muted }}>
-              {profTitle(profile.profession, lang)} · {zone ? zone.label : t("common.ncr")}
+              {profession ? profTitle(profession, lang) : t("shifts.chooseGig")} · {zone ? zone.label : t("shifts.chooseArea")}
             </div>
           </div>
           {/* Location indicator */}
@@ -599,52 +596,20 @@ export default function ShiftsPage() {
         </div>
       )}
 
-      {/* Today's total hero */}
-      <div style={{ margin: "18px 20px 0" }}>
-        <div style={{ borderRadius: 22, padding: "18px 20px", background: "linear-gradient(150deg,#0B6B48,#064D33 60%,#032D1E 100%)", boxShadow: "0 20px 48px -18px rgba(4,77,51,.55)", position: "relative", overflow: "hidden" }}>
-          <div style={{ position: "absolute", top: -40, right: -30, width: 160, height: 160, borderRadius: "50%", background: "radial-gradient(circle, rgba(255,255,255,.14), transparent 65%)", pointerEvents: "none" }} />
-          <div style={{ position: "relative" }}>
-            <div style={{ fontWeight: 700, fontSize: 12, letterSpacing: ".8px", textTransform: "uppercase", color: "rgba(255,255,255,.8)", marginBottom: 10 }}>{t("shifts.top3")}</div>
-            <div style={{ display: "flex", alignItems: "flex-end", gap: 6, marginBottom: 14 }}>
-              <span style={{ fontWeight: 800, fontSize: 40, letterSpacing: "-1.4px", color: "#fff", lineHeight: .9, fontVariantNumeric: "tabular-nums" }}>₹{todayTotal.toLocaleString("en-IN")}</span>
-              <span style={{ fontSize: 13, fontWeight: 600, color: "rgba(255,255,255,.75)", marginBottom: 4 }}>{t("shifts.projected")}</span>
-            </div>
-            <div style={{ display: "flex", gap: 20 }}>
-              <div>
-                <div style={{ fontSize: 11, color: "rgba(255,255,255,.7)", fontWeight: 600, display: "flex", alignItems: "center", gap: 4 }}>
-                  <Clock size={11} /> {t("shifts.workWindow")}
-                </div>
-                <div style={{ fontWeight: 800, fontSize: 16, color: "#fff", fontVariantNumeric: "tabular-nums" }}>8.5 {t("shifts.hrs")}</div>
-              </div>
-              <div style={{ width: 1, background: "rgba(255,255,255,.2)" }} />
-              <div>
-                <div style={{ fontSize: 11, color: "rgba(255,255,255,.7)", fontWeight: 600, display: "flex", alignItems: "center", gap: 4 }}>
-                  <TrendingUp size={11} /> {t("shifts.vsUsual")}
-                </div>
-                <div style={{ fontWeight: 800, fontSize: 16, color: "#fff" }}>+34%</div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
 
-      {/* Honest estimate disclaimer */}
-      <div style={{ margin: "7px 20px 0", fontSize: 11, color: G.faint, lineHeight: 1.4 }}>
-        * {t("common.estimated")}
-      </div>
-
+      {profession && zone && <div style={{ margin: "14px 20px 0", fontSize: 12, color: G.muted }}>{t("shifts.previewNote")}</div>}
       {/* Zone note */}
-      {zone && (
+      {zone && profession && (
         <div style={{ margin: "14px 20px 0", padding: "10px 14px", borderRadius: 12, background: G.green50, border: `1px solid ${G.green100}`, display: "flex", alignItems: "center", gap: 8 }}>
           <MapPin size={14} color={G.green700} />
           <span style={{ fontSize: 12.5, fontWeight: 600, color: G.green700 }}>
-            {t("shifts.showingSurge")} <strong>{zone.label}</strong>
+            {t("shifts.areaPlan")} <strong>{zone.label}</strong>
           </span>
         </div>
       )}
 
       {/* Location prompt — without it the plan is generic */}
-      {locationStatus !== "granted" && (
+      {profession && locationStatus !== "granted" && (
         <div style={{ margin: "14px 20px 0", padding: "12px 14px", borderRadius: 14, background: G.amberBg, border: "1px solid rgba(201,110,0,.25)", display: "flex", alignItems: "center", gap: 11 }}>
           <MapPin size={18} color={G.amber} style={{ flexShrink: 0 }} />
           <div style={{ flex: 1, minWidth: 0 }}>
@@ -658,14 +623,14 @@ export default function ShiftsPage() {
       )}
 
       {/* Windows */}
-      <div style={{ padding: "18px 20px 0" }}>
+      {profession && (zone || !guest) && <div style={{ padding: "18px 20px 0" }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
           <span style={{ fontWeight: 700, fontSize: 12, letterSpacing: ".7px", textTransform: "uppercase", color: G.faint }}>{t("shifts.allWindows")}</span>
           <span style={{ fontSize: 11.5, fontWeight: 700, color: G.green700 }}>{rideWindows.length} {t("shifts.ride")}{avoidWindow ? ` · 1 ${t("shifts.avoid")}` : ""}</span>
         </div>
-        {rideWindows.map((w, i) => <WindowCard key={i} w={w} idx={i} isAvoid={false} active={isWindowActive(w, now)} spots={spots} areas={areas} areaName={areaLabel} zoneId={zone?.id ?? null} coords={coords} profId={profile.profession} fb={feedback} />)}
-        {avoidWindow && <WindowCard w={avoidWindow} idx={0} isAvoid active={isWindowActive(avoidWindow, now)} spots={spots} areas={areas} areaName={areaLabel} zoneId={zone?.id ?? null} coords={coords} profId={profile.profession} fb={feedback} />}
-      </div>
+        {rideWindows.map((w, i) => <WindowCard key={i} w={w} idx={i} isAvoid={false} active={isWindowActive(w, now)} spots={spots} areas={areas} areaName={areaLabel} zoneId={zone?.id ?? null} coords={coords} profId={profession} fb={feedback} />)}
+        {avoidWindow && <WindowCard w={avoidWindow} idx={0} isAvoid active={isWindowActive(avoidWindow, now)} spots={spots} areas={areas} areaName={areaLabel} zoneId={zone?.id ?? null} coords={coords} profId={profession} fb={feedback} />}
+      </div>}
     </div>
   );
 }

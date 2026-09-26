@@ -35,7 +35,7 @@ function haversineKm(aLat: number, aLon: number, bLat: number, bLon: number): nu
   return R * 2 * Math.atan2(Math.sqrt(s), Math.sqrt(1 - s));
 }
 
-async function fetchWater(lat: number, lon: number): Promise<WaterPoint[]> {
+async function fetchWater(lat: number, lon: number): Promise<WaterPoint[] | null> {
   const query =
     `[out:json][timeout:15];(` +
     `node["amenity"="drinking_water"](around:${RADIUS_M},${lat},${lon});` +
@@ -69,7 +69,7 @@ async function fetchWater(lat: number, lon: number): Promise<WaterPoint[]> {
       .sort((a, b) => a.distKm - b.distKm)
       .slice(0, 8);
   } catch {
-    return [];
+    return null;
   } finally {
     clearTimeout(timer);
   }
@@ -83,14 +83,16 @@ export async function GET(request: Request) {
   const { lat, lon } = parsed.data;
   const ck = `${lat.toFixed(2)},${lon.toFixed(2)}`;
   const hit = cache.get(ck);
-  if (hit && Date.now() - hit.at < TTL) return Response.json({ points: hit.data });
+  if (hit && Date.now() - hit.at < TTL) return Response.json({ points: hit.data, status: "ok", source: "OpenStreetMap", queriedAt: new Date(hit.at).toISOString() });
 
   // Hard cap: the handler always resolves within TIMEOUT_MS even if every
   // mirror hangs at the socket level.
-  const points = await Promise.race<WaterPoint[]>([
+  const points = await Promise.race<WaterPoint[] | null>([
     fetchWater(lat, lon),
-    new Promise<WaterPoint[]>((res) => setTimeout(() => res([]), TIMEOUT_MS + 500)),
+    new Promise<null>((res) => setTimeout(() => res(null), TIMEOUT_MS + 500)),
   ]);
-  if (points.length) cache.set(ck, { at: Date.now(), data: points });
-  return Response.json({ points });
+  if (points === null) return Response.json({ points: [], status: "unavailable", source: "OpenStreetMap" }, { status: 503 });
+  const at = Date.now();
+  cache.set(ck, { at, data: points });
+  return Response.json({ points, status: "ok", source: "OpenStreetMap", queriedAt: new Date(at).toISOString() });
 }

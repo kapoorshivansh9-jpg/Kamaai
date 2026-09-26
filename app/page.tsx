@@ -152,7 +152,7 @@ export default function HomePage() {
                 {t("home.heroSub")}
               </p>
               <Link
-                href="/onboarding"
+                href="/shifts"
                 style={{
                   display:"inline-flex", alignItems:"center", gap:8,
                   padding:"13px 22px", borderRadius:14,
