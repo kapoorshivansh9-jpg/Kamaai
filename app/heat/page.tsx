@@ -1,12 +1,13 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Thermometer, Wind, Droplets, Flame, MapPin, Info, Navigation, Phone } from "lucide-react";
 
 import { useT, useLang, localeTag } from "@/lib/i18n";
 import { fetchNearbyWaterPoints, addWaterPoint } from "@/lib/supabase-events";
 import { supabaseConfigured } from "@/lib/supabase-browser";
 import type { HeatMetric, SattuPoint } from "@/lib/ridekamao-data";
+import { ForecastSection } from "@/components/forecast-section";
 
 const G = {
   ink: "#05160E", ink2: "#163022", muted: "#456055", faint: "#7A9A8A",
@@ -67,6 +68,9 @@ async function conditionsDirect(lat: number, lon: number): Promise<Live | null> 
     return { live: true, weatherAt: typeof w.time === "string" ? w.time : null, aqiAt: typeof a.time === "string" ? a.time : null, source: "Open-Meteo", tempC, feelsLikeC: Math.round(feels), humidity: typeof w.relative_humidity_2m === "number" ? Math.round(w.relative_humidity_2m) : null, aqi, uv: typeof w.uv_index === "number" ? Math.round(w.uv_index) : null, level };
   } catch { return null; }
 }
+
+// Central New Delhi — used for the regional readings shown before (or without) a location.
+const NCR_CENTRE = { lat: 28.61, lon: 77.21 };
 
 const TONE_KEY: Record<Tone, "heat.safe" | "heat.caution" | "heat.high" | "heat.extreme"> = {
   safe: "heat.safe", mod: "heat.caution", high: "heat.high", ext: "heat.extreme",
@@ -197,7 +201,7 @@ export default function HeatPage() {
   const [coords, setCoords] = useState<{ lat: number; lon: number } | null>(null);
   const [locationRequested, setLocationRequested] = useState(false);
   const [locatedAt, setLocatedAt] = useState<number | null>(null);
-  const [clock, setClock] = useState(Date.now());
+  const [clock, setClock] = useState(() => Date.now());
   const [cat, setCat] = useState<string>("all");
   const [addOpen, setAddOpen] = useState(false);
   const [addCat, setAddCat] = useState<string>("water");
@@ -205,17 +209,31 @@ export default function HeatPage() {
 
   useEffect(() => { const id = window.setInterval(() => setClock(Date.now()), 60000); return () => window.clearInterval(id); }, []);
 
-  const load = async (lat: number, lon: number) => {
-    setCoords({ lat, lon });
-    setLive(null);
-    setCheckedAt(null);
-    setWater(null);
+  // Weather and places load separately. Weather always has something to show:
+  // the Delhi NCR average first, then the rider's own area once a location is
+  // available. Places ("nearby") still need a recent, accurate fix.
+  const [wx, setWx] = useState<{ lat: number; lon: number; scope: "ncr" | "local" }>({ ...NCR_CENTRE, scope: "ncr" });
+  const [rough, setRough] = useState(false);
+  const wxReq = useRef(0);
+
+  const loadWeather = async (lat: number, lon: number, scope: "ncr" | "local") => {
+    const id = ++wxReq.current; // a slower, older request must not overwrite a newer one
+    let next: Live | null = null;
     try {
       const r = await fetch(`/api/conditions?lat=${lat}&lon=${lon}`);
       const j = await r.json();
-      setLive(j?.live ? j as Live : await conditionsDirect(lat, lon));
-      setCheckedAt(Date.now());
-    } catch { setLive(await conditionsDirect(lat, lon)); setCheckedAt(Date.now()); }
+      next = j?.live ? (j as Live) : await conditionsDirect(lat, lon);
+    } catch { next = await conditionsDirect(lat, lon); }
+    if (id !== wxReq.current) return;
+    // Keep the regional readings on screen if the local lookup fails.
+    if (!next && scope === "local") return;
+    setWx({ lat, lon, scope });
+    setLive(next);
+    setCheckedAt(Date.now());
+  };
+  const loadPlaces = async (lat: number, lon: number) => {
+    setCoords({ lat, lon });
+    setWater(null);
     const db = await fetchNearbyWaterPoints(lat, lon);
     if (db && db.length) { setWater(db); return; }
     try {
@@ -224,29 +242,55 @@ export default function HeatPage() {
       if (r.ok && j.status === "ok" && Array.isArray(j.points)) setWater(j.points);
     } catch { /* unavailable is not sample */ }
   };
-  const askLocation = () => {
-    setLocationRequested(true);
-    setLocatedAt(null); setCoords(null); setLive(null); setWater(null);
+  const locate = (userAsked: boolean) => {
+    if (userAsked) setLocationRequested(true);
+    setRough(false);
     if (!("geolocation" in navigator)) return;
     navigator.geolocation.getCurrentPosition(
       (pos) => {
-        if (!Number.isFinite(pos.coords.accuracy) || pos.coords.accuracy > 2000 || pos.timestamp > Date.now() + 60000 || Date.now() - pos.timestamp > 15 * 60 * 1000) return;
-        setLocatedAt(pos.timestamp);
-        load(Math.round(pos.coords.latitude * 100) / 100, Math.round(pos.coords.longitude * 100) / 100);
+        if (pos.timestamp > Date.now() + 60000 || Date.now() - pos.timestamp > 15 * 60 * 1000) return;
+        const lat = Math.round(pos.coords.latitude * 100) / 100, lon = Math.round(pos.coords.longitude * 100) / 100;
+        if (!Number.isFinite(lat) || !Number.isFinite(lon)) return;
+        const acc = pos.coords.accuracy;
+        // Weather barely changes over a few km, so an approximate fix (Wi-Fi or
+        // cell tower, common on laptops and indoors) is still good enough for it.
+        if (Number.isFinite(acc) && acc <= 25000) loadWeather(lat, lon, "local");
+        if (Number.isFinite(acc) && acc <= 2000) { setLocatedAt(pos.timestamp); loadPlaces(lat, lon); }
+        else { setLocatedAt(null); setCoords(null); setWater(null); if (userAsked) setRough(true); }
       },
-      () => { setCoords(null); setWater(null); setLive(null); },
+      () => { setLocatedAt(null); setCoords(null); setWater(null); },
       { timeout: 10000, maximumAge: 0, enableHighAccuracy: true }
     );
   };
+  const askLocation = () => locate(true);
+
+  // On open: show regional weather straight away, and if this rider has already
+  // allowed location on this device, switch to their area without another tap.
+  useEffect(() => {
+    (async () => {
+      await loadWeather(NCR_CENTRE.lat, NCR_CENTRE.lon, "ncr");
+      try {
+        const st = await navigator.permissions?.query({ name: "geolocation" });
+        if (st?.state === "granted") locate(false);
+      } catch { /* Permissions API missing — the button still works */ }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const locationReady = !!(coords && locatedAt && clock - locatedAt < 15 * 60 * 1000);
   const fresh = (at?: string | null) => {
     if (!at) return false;
     const time = Date.parse(at.endsWith("Z") ? at : `${at}Z`);
-    return Number.isFinite(time) && checkedAt !== null && checkedAt >= time && checkedAt - time <= 2 * 60 * 60 * 1000;
+    // Allow a few minutes of device-clock drift either way; older than 2 h is stale.
+    return Number.isFinite(time) && checkedAt !== null && time - checkedAt <= 15 * 60 * 1000 && checkedAt - time <= 2 * 60 * 60 * 1000;
   };
-  const weatherOk = locationReady && !!live && fresh(live.weatherAt) && live.tempC != null;
-  const aqiOk = locationReady && !!live && fresh(live.aqiAt) && live.aqi != null;
+  const weatherOk = !!live && fresh(live.weatherAt) && live.tempC != null;
+  const aqiOk = !!live && fresh(live.aqiAt) && live.aqi != null;
   const level: Tone = weatherOk ? live!.level : "safe";
+  // Before the first answer arrives, say "checking" — "unavailable" is for a real failure.
+  const pending = checkedAt === null;
+  const emptyLabel = pending ? t("heat.loading") : t("heat.unavailable");
+  const emptyText = pending ? t("heat.loading") : t("heat.noReadings");
   const metrics: HeatMetric[] = [];
   if (aqiOk) { const tone = aqiTone(live!.aqi!); metrics.push({ id: "aqi", label: t("heat.m.aqi"), value: String(live!.aqi), tone, cat: t(TONE_KEY[tone]) }); }
   if (weatherOk) {
@@ -302,10 +346,11 @@ export default function HeatPage() {
             <h1 style={{ margin: "0 0 2px", fontWeight: 800, fontSize: 26, letterSpacing: "-.6px", color: G.ink }}>{t("heat.title")}</h1>
             <span style={{ display: "inline-flex", alignItems: "center", gap: 4, padding: "2px 8px", borderRadius: 100, fontSize: 10, fontWeight: 800, letterSpacing: ".4px", background: metrics.length ? G.green50 : "#EDEFEE", color: metrics.length ? G.green700 : G.faint }}>
               {metrics.length > 0 && <span style={{ width: 5, height: 5, borderRadius: "50%", background: G.green, display: "inline-block", animation: "rk-pulse 1.4s infinite" }} />}
-              {metrics.length ? t("heat.readings") : t("heat.unavailable")}
+              {metrics.length ? t("heat.readings") : emptyLabel}
             </span>
           </div>
-          <div style={{ fontSize: 12.5, color: G.muted }}>{measured ? `${t("heat.measured")} ${measured} · Open-Meteo` : t("heat.noReadings")}{weatherOk && !aqiOk ? ` · ${t("heat.noAqi")}` : ""}</div>
+          <div style={{ fontSize: 12.5, color: G.muted }}>{measured ? `${t("heat.measured")} ${measured} · Open-Meteo` : emptyText}{weatherOk && !aqiOk ? ` · ${t("heat.noAqi")}` : ""}</div>
+          {metrics.length > 0 && <div style={{ fontSize: 12.5, color: G.muted, marginTop: 2 }}>{t(wx.scope === "local" ? "heat.scopeLocal" : "heat.scopeNcr")}</div>}
         </div>
 
         {/* Hero */}
@@ -318,12 +363,12 @@ export default function HeatPage() {
               <div style={{ display: "flex", alignItems: "center", gap: 7, marginBottom: 12 }}>
                 {metrics.length > 0 && <span style={{ width: 8, height: 8, borderRadius: "50%", background: "#fff", display: "inline-block" }} />}
                 <span style={{ fontWeight: 700, fontSize: 12, letterSpacing: ".8px", textTransform: "uppercase", color: "rgba(255,255,255,.85)" }}>
-                  {metrics.length ? t("heat.indexArea") : t("heat.unavailable")}
+                  {metrics.length ? t(wx.scope === "local" ? "heat.indexArea" : "heat.indexNcr") : emptyLabel}
                 </span>
               </div>
               <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between" }}>
                 <div>
-                  <div style={{ fontWeight: 800, fontSize: 44, lineHeight: .9, letterSpacing: "-1.4px", color: "#fff" }}>{weatherOk ? t(TONE_KEY[level]) : t("heat.unavailable")}</div>
+                  <div style={{ fontWeight: 800, fontSize: 44, lineHeight: .9, letterSpacing: "-1.4px", color: "#fff" }}>{weatherOk ? t(TONE_KEY[level]) : pending ? "…" : t("heat.unavailable")}</div>
                   <div style={{ fontSize: 13.5, color: "rgba(255,255,255,.85)", marginTop: 8, fontWeight: 600 }}>{t("heat.takeBreaks")}</div>
                 </div>
                 <div style={{ textAlign: "right" }}>
@@ -339,9 +384,17 @@ export default function HeatPage() {
         <div style={{ padding: "18px 20px 0" }}>
           <div style={{ fontWeight: 700, fontSize: 12, letterSpacing: ".7px", textTransform: "uppercase", color: G.faint, marginBottom: 11 }}>{t("heat.measuredReadings")}</div>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-            {metrics.length ? metrics.map((m) => <MetricTile key={m.id} m={m} />) : <div style={{ gridColumn: "1 / -1", padding: 16, background: G.surface, borderRadius: 14, color: G.muted }}>{t("heat.noReadings")}</div>}
+            {metrics.length ? metrics.map((m) => <MetricTile key={m.id} m={m} />) : <div style={{ gridColumn: "1 / -1", padding: 16, background: G.surface, borderRadius: 14, color: G.muted }}>{emptyText}</div>}
           </div>
         </div>
+
+        {wx.scope === "ncr" && (
+          <div style={{ padding: "12px 20px 0" }}>
+            <button onClick={askLocation} className="rk-focus" style={{ width: "100%", minHeight: 48, padding: "11px 14px", borderRadius: 12, border: `1px solid ${G.green100}`, background: G.green50, color: G.green700, fontWeight: 700, fontSize: 14, cursor: "pointer" }}>{t("heat.allowLocation")}</button>
+          </div>
+        )}
+
+        <ForecastSection coords={{ lat: wx.lat, lon: wx.lon }} scope={wx.scope} />
 
         {/* Rider amenities map */}
         <div style={{ padding: "18px 20px 0" }}>
@@ -351,7 +404,7 @@ export default function HeatPage() {
           </div>
 
           {!locationReady && <button onClick={askLocation} style={{ width: "100%", minHeight: 48, padding: "11px 14px", marginBottom: 12, borderRadius: 12, border: `1px solid ${G.green100}`, background: G.green50, color: G.green700, fontWeight: 700, cursor: "pointer" }}>{t("heat.allowLocation")}</button>}
-          {locationRequested && !locationReady && <p style={{ color: G.muted, fontSize: 12 }}>{t("heat.locationDenied")}</p>}
+          {locationRequested && !locationReady && <p style={{ color: G.muted, fontSize: 12, lineHeight: 1.5 }}>{t(rough ? "heat.roughLocation" : "heat.locationDenied")}</p>}
           {/* Category filter chips */}
           <div className="noscroll" style={{ display: "flex", gap: 7, overflowX: "auto", paddingBottom: 11, marginBottom: 1 }}>
             {["all", ...AMEN_CATS].map((c) => {

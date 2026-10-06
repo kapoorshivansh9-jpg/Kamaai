@@ -5,7 +5,9 @@ import Link from "next/link";
 import { MapPin, AlertTriangle, Target, Zap, Navigation, Lightbulb, ChevronDown } from "lucide-react";
 import { useProfile } from "@/lib/ridekamao-profile";
 import { windowsFor, detectZone, isWindowActive, PROFESSIONS } from "@/lib/ridekamao-data";
-import { trackEvent, submitSpotFeedback, fetchZoneStats, type ZoneStat } from "@/lib/supabase-events";
+import { trackEvent, submitSpotFeedback, fetchZoneStats, fetchNearbyDarkStores, addDarkStore, DARK_BRANDS, type ZoneStat, type DarkStore, type DarkBrand } from "@/lib/supabase-events";
+import { supabaseConfigured } from "@/lib/supabase-browser";
+import { rankClusters, placesForWindow, localLandmarks, type Cluster, type RankedCluster, type PlaceSpot } from "@/lib/places";
 import { useT, useLang, profTitle, localeTag } from "@/lib/i18n";
 import type { ShiftWindow, Zone, Hotspot } from "@/lib/ridekamao-data";
 
@@ -188,12 +190,16 @@ function SpotRow({ href, title, sub }: { href: string; title: string; sub: strin
 
 type Feedback = { canVote: boolean; stats: Record<string, ZoneStat> | null; voted: Set<string>; vote: (zone: string, windowId: string, busy: boolean) => void };
 
-function ZoneRow({ zone, windowId, fb, distKm, heat }: { zone: string; windowId: string; fb: Feedback; distKm?: number; heat?: "peak" | "high" | "good" }) {
+// `voteKey` (defaults to the name) is what busy/quiet votes are stored under;
+// `href` opens the exact pin instead of a name search; `detail` is the
+// measurable line ("34 food places within 220 m").
+function ZoneRow({ zone, windowId, fb, distKm, heat, voteKey, href, detail }: { zone: string; windowId: string; fb: Feedback; distKm?: number; heat?: "peak" | "high" | "good"; voteKey?: string; href?: string; detail?: string }) {
   const t = useT();
   const chip = heat ? HEAT_CHIP[heat] : null;
-  const stat = fb.stats?.[zone];
+  const vk = voteKey ?? zone;
+  const stat = fb.stats?.[vk];
   const votes = stat ? stat.busy + stat.quiet : 0;
-  const voted = fb.voted.has(zone);
+  const voted = fb.voted.has(vk);
   const crowd = votes > 0
     ? `${stat!.score >= 0.6 ? "🔥 " + t("fb.usuallyBusy") : stat!.score <= 0.4 ? t("fb.oftenQuiet") : t("fb.mixed")} · ${votes}`
     : t("fb.q");
@@ -201,7 +207,7 @@ function ZoneRow({ zone, windowId, fb, distKm, heat }: { zone: string; windowId:
   const voteBtn = (bg: string) => ({ width: 30, height: 30, borderRadius: 9, border: `1px solid ${G.line}`, background: bg, fontSize: 14, lineHeight: 1, cursor: "pointer", flexShrink: 0, display: "flex" as const, alignItems: "center", justifyContent: "center" });
   return (
     <div style={{ display: "flex", gap: 8, alignItems: "center", padding: "9px 11px", borderRadius: 11, background: G.surface, border: `1px solid ${G.line}` }}>
-      <a href={searchUrl(zone)} target="_blank" rel="noopener noreferrer" style={{ display: "flex", gap: 10, alignItems: "center", flex: 1, minWidth: 0, textDecoration: "none" }}>
+      <a href={href ?? searchUrl(zone)} target="_blank" rel="noopener noreferrer" className="rk-focus" style={{ display: "flex", gap: 10, alignItems: "center", flex: 1, minWidth: 0, textDecoration: "none" }}>
         <div style={{ width: 26, height: 26, borderRadius: 8, flexShrink: 0, background: G.green50, display: "flex", alignItems: "center", justifyContent: "center" }}>
           <MapPin size={14} color={G.green700} />
         </div>
@@ -210,6 +216,7 @@ function ZoneRow({ zone, windowId, fb, distKm, heat }: { zone: string; windowId:
             <div style={{ flex: 1, minWidth: 0, fontSize: 14.5, fontWeight: 700, color: G.ink, lineHeight: 1.25, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{zone}</div>
             {chip && <span style={{ flexShrink: 0, padding: "2px 7px", borderRadius: 6, fontSize: 9.5, fontWeight: 800, letterSpacing: ".3px", textTransform: "uppercase", background: chip.bg, color: chip.ink }}>{t(chip.key)}</span>}
           </div>
+          {detail && <div style={{ fontSize: 12, color: G.ink2, marginTop: 2, lineHeight: 1.4, fontWeight: 600 }}>{detail}</div>}
           <div style={{ fontSize: 11, color: votes > 0 && stat!.score >= 0.6 ? G.green700 : G.muted, marginTop: 2, lineHeight: 1.4, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{badge}</div>
         </div>
       </a>
@@ -217,8 +224,8 @@ function ZoneRow({ zone, windowId, fb, distKm, heat }: { zone: string; windowId:
         <span style={{ fontSize: 11, fontWeight: 800, color: G.green700, flexShrink: 0 }}>✓ {t("fb.thanks")}</span>
       ) : (
         <>
-          <button onClick={() => fb.vote(zone, windowId, true)} aria-label={t("fb.yes")} title={t("fb.yes")} style={voteBtn(G.green50)}>👍</button>
-          <button onClick={() => fb.vote(zone, windowId, false)} aria-label={t("fb.no")} title={t("fb.no")} style={voteBtn(G.bg)}>👎</button>
+          <button onClick={() => fb.vote(vk, windowId, true)} aria-label={t("fb.yes")} title={t("fb.yes")} className="rk-focus" style={voteBtn(G.green50)}>👍</button>
+          <button onClick={() => fb.vote(vk, windowId, false)} aria-label={t("fb.no")} title={t("fb.no")} className="rk-focus" style={voteBtn(G.bg)}>👎</button>
         </>
       )}
     </div>
@@ -261,9 +268,21 @@ function NestedSpot({ s }: { s: Spot }) {
   );
 }
 
-function DetailPanel({ d, reason, tag, areas, spots, windowId, fb, isMidday }: { d: ShiftWindow["detail"]; reason: string; tag: typeof TAG[keyof typeof TAG]; areas: Area[]; spots: Spot[]; windowId: string; fb: Feedback; isMidday: boolean }) {
+function DetailPanel({ d, reason, tag, areas, spots, windowId, fb, isMidday, ranked, dbPlaces, profId }: { d: ShiftWindow["detail"]; reason: string; tag: typeof TAG[keyof typeof TAG]; areas: Area[]; spots: Spot[]; windowId: string; fb: Feedback; isMidday: boolean; ranked: RankedCluster[]; dbPlaces: PlaceSpot[]; profId: string }) {
   const t = useT();
   const flat = spots.slice(0, 5);
+  const counted = ranked.length > 0 || dbPlaces.length > 0;
+  const HEATS = ["peak", "high", "good"] as const;
+  // "34 food places within 220 m", narrowed to the kinds that are busy in this window.
+  const clusterDetail = (r: RankedCluster) => {
+    const c = r.cluster;
+    const base = c.grp === "nightlife"
+      ? t("d.cNight", { n: r.count, m: c.radiusM })
+      : r.count === c.placeCount
+        ? t("d.cFood", { n: r.count, m: c.radiusM })
+        : t("d.cFoodWindow", { n: r.count, total: c.placeCount, m: c.radiusM });
+    return c.societiesNearby > 0 ? `${base} · ${t("d.cSoc", { s: c.societiesNearby })}` : base;
+  };
   return (
     <div style={{ padding: "14px 16px 16px", borderTop: `1px solid ${G.line2}`, background: `${tag.bg}40`, animation: "rk-fadeUp .25s both" }}>
       {/* Original playbook details, shown only after GPS is granted. */}
@@ -290,9 +309,41 @@ function DetailPanel({ d, reason, tag, areas, spots, windowId, fb, isMidday }: {
         </div>
       )}
 
+      {/* Counted, pinned spots from our own places database */}
+      {ranked.length > 0 && (
+        <>
+          <GroupLabel>{t("d.countedSpots")}</GroupLabel>
+          <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 14 }}>
+            {ranked.map((r, i) => (
+              <div key={r.cluster.key} style={{ border: `1px solid ${G.line}`, borderRadius: 12, overflow: "hidden", background: G.surface }}>
+                <ZoneRow zone={r.cluster.name} voteKey={r.cluster.key} href={dirUrl(r.cluster.lat, r.cluster.lon)} detail={clusterDetail(r)}
+                  distKm={r.cluster.distKm} windowId={windowId} fb={fb} heat={HEATS[Math.min(i, 2)]} />
+                {r.cluster.topPlaces.length > 0 && (
+                  <div style={{ borderTop: `1px solid ${G.line2}`, padding: "7px 12px 9px", fontSize: 12, lineHeight: 1.45, color: G.muted }}>
+                    {t("d.includes", { names: r.cluster.topPlaces.join(", ") })}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        </>
+      )}
+      {dbPlaces.length > 0 && (
+        <>
+          <GroupLabel>{t(profId === "qcom" ? "d.drops" : "d.namedPlaces")}</GroupLabel>
+          <div style={{ display: "flex", flexDirection: "column", gap: 7, marginBottom: 14 }}>
+            {dbPlaces.map((s) => (
+              <ZoneRow key={`${s.kind}:${s.name}`} zone={s.name} voteKey={`p:${s.kind}:${s.name}`} href={dirUrl(s.lat, s.lon)} detail={s.kind}
+                distKm={s.distKm} windowId={windowId} fb={fb} />
+            ))}
+          </div>
+        </>
+      )}
+      {counted && <p style={{ margin: "-4px 0 14px", fontSize: 11, lineHeight: 1.45, color: G.faint }}>{t("d.dataNote")}</p>}
+
       {/* Places — grouped under nearby areas (≤5 km) when we have live data */}
-      <GroupLabel>{areas.length > 0 ? t("d.areasNear") : t("d.bestSpots")}</GroupLabel>
-      <div style={{ display: "flex", flexDirection: "column", gap: areas.length > 0 ? 10 : 7, marginBottom: 14 }}>
+      {!counted && <GroupLabel>{areas.length > 0 ? t("d.areasNear") : t("d.bestSpots")}</GroupLabel>}
+      {!counted && <div style={{ display: "flex", flexDirection: "column", gap: areas.length > 0 ? 10 : 7, marginBottom: 14 }}>
         {areas.length > 0
           ? areas.map((a, i) => (
               <div key={i} style={{ border: `1px solid ${G.line}`, borderRadius: 12, overflow: "hidden", background: G.surface }}>
@@ -305,7 +356,7 @@ function DetailPanel({ d, reason, tag, areas, spots, windowId, fb, isMidday }: {
           : flat.length > 0
             ? flat.map((s, i) => <SpotRow key={i} href={dirUrl(s.lat, s.lon)} title={s.name} sub={`${s.kind} · ${s.distKm} km`} />)
             : d.hotspots.map((h, i) => <HotspotRow key={i} h={h} />)}
-      </div>
+      </div>}
 
       {/* Money tip */}
       <div style={{ display: "flex", gap: 9, alignItems: "flex-start", padding: "10px 12px", borderRadius: 11, background: "rgba(245,197,66,.14)", border: "1px solid rgba(201,110,0,.22)" }}>
@@ -316,17 +367,21 @@ function DetailPanel({ d, reason, tag, areas, spots, windowId, fb, isMidday }: {
   );
 }
 
-function WindowCard({ w, idx, isAvoid, active, spots, areas, areaName, zoneId, coords, profId, fb }: { w: ShiftWindow; idx: number; isAvoid: boolean; active?: boolean; spots: Spot[]; areas: Area[]; areaName: string; zoneId: string | null; coords: { lat: number; lon: number } | null; profId: string; fb: Feedback }) {
+function WindowCard({ w, idx, isAvoid, active, spots, areas, areaName, zoneId, coords, profId, fb, clusters, dbBacked }: { w: ShiftWindow; idx: number; isAvoid: boolean; active?: boolean; spots: Spot[]; areas: Area[]; areaName: string; zoneId: string | null; coords: { lat: number; lon: number } | null; profId: string; fb: Feedback; clusters: Cluster[]; dbBacked: boolean }) {
   const [open, setOpen] = useState((idx === 0 || !!active) && !isAvoid);
   const tag = TAG[w.tag];
   const t = useT();
-  const winSpots = spotsForWindow(profId, w.id, spots);
+  // Database-backed mode: counted clusters and named places replace the old
+  // hand-written sub-areas entirely.
+  const ranked = dbBacked ? rankClusters(clusters, profId, w.id) : [];
+  const dbPlaces = dbBacked ? placesForWindow(profId, w.id, spots) : [];
+  const winSpots = dbBacked ? [] : spotsForWindow(profId, w.id, spots);
   const kinds = WINDOW_KINDS[profId]?.[w.id] ?? null;
   const matchKind = (s: Spot) => !kinds || kinds.includes(s.kind);
 
   // Candidate sub-areas for THIS zone + window, de-duplicated so two near-identical
   // places (e.g. Film City & Sector 18, ~1 km apart) never both appear.
-  const matched = coords ? spots.filter(matchKind) : [];
+  const matched = coords && !dbBacked ? spots.filter(matchKind) : [];
   const candidates: SubArea[] = [];
   for (const sa of subAreasFor(coords, profId, w.id)) {
     if (candidates.every((c) => haversineKm(c.lat, c.lon, sa.lat, sa.lon) > 1.5)) candidates.push(sa);
@@ -349,7 +404,7 @@ function WindowCard({ w, idx, isAvoid, active, spots, areas, areaName, zoneId, c
     .slice(0, 3);
 
   // Fallbacks: real OSM neighbourhoods (already have spots) → the rider's area.
-  if (winAreas.length === 0) {
+  if (winAreas.length === 0 && !dbBacked) {
     winAreas = areas.map((a) => ({ name: a.name, distKm: a.distKm, spots: (kinds ? a.spots.filter(matchKind) : a.spots).slice(0, 5) })).filter((a) => a.spots.length > 0).slice(0, 3);
   }
   if (winAreas.length === 0 && winSpots.length > 0) {
@@ -442,8 +497,93 @@ function WindowCard({ w, idx, isAvoid, active, spots, areas, areaName, zoneId, c
         </button>
       )}
 
-      {open && <DetailPanel d={w.detail} reason={w.reason} tag={tag} areas={winAreas} spots={winSpots} windowId={w.id} fb={fb} isMidday={isMidday} />}
+      {open && <DetailPanel d={w.detail} reason={w.reason} tag={tag} areas={winAreas} spots={winSpots} windowId={w.id} fb={fb} isMidday={isMidday} ranked={ranked} dbPlaces={dbPlaces} profId={profId} />}
     </div>
+  );
+}
+
+const BRAND_LABEL: Record<DarkBrand, string> = { blinkit: "Blinkit", zepto: "Zepto", instamart: "Instamart", bigbasket: "BigBasket", other: "" };
+
+// Quick-commerce riders wait at their own dark store, and no public dataset
+// lists those stores — so riders pin them and everyone nearby can see the pins.
+function DarkStoreCard({ coords }: { coords: { lat: number; lon: number } }) {
+  const t = useT();
+  const [stores, setStores] = useState<DarkStore[] | null>(null);
+  const [open, setOpen] = useState(false);
+  const [brand, setBrand] = useState<DarkBrand>("blinkit");
+  const [name, setName] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetchNearbyDarkStores(coords.lat, coords.lon).then((s) => { if (!cancelled) setStores(s ?? []); });
+    return () => { cancelled = true; };
+  }, [coords.lat, coords.lon]);
+
+  if (!supabaseConfigured()) return null;
+  const brandName = (b: DarkBrand) => BRAND_LABEL[b] || t("ds.other");
+
+  const pin = () => {
+    if (!("geolocation" in navigator)) { setMsg(t("ds.needGps")); return; }
+    setBusy(true); setMsg(null);
+    // A store pin has to be exact, so this asks for a fresh, precise fix. It is
+    // the store's position (the rider is standing at it) and has no rider id.
+    navigator.geolocation.getCurrentPosition(
+      async (pos) => {
+        if (!Number.isFinite(pos.coords.accuracy) || pos.coords.accuracy > 100) { setBusy(false); setMsg(t("ds.needGps")); return; }
+        const lat = Math.round(pos.coords.latitude * 1e4) / 1e4, lon = Math.round(pos.coords.longitude * 1e4) / 1e4;
+        const res = await addDarkStore(lat, lon, brand, name);
+        setBusy(false);
+        setMsg(t(res === "added" ? "ds.added" : res === "exists" ? "ds.exists" : "ds.failed"));
+        if (res !== "failed") {
+          setOpen(false); setName("");
+          const fresh = await fetchNearbyDarkStores(coords.lat, coords.lon);
+          if (fresh) setStores(fresh);
+        }
+      },
+      () => { setBusy(false); setMsg(t("ds.needGps")); },
+      { timeout: 12000, maximumAge: 0, enableHighAccuracy: true }
+    );
+  };
+
+  return (
+    <section aria-labelledby="ds-title" style={{ margin: "14px 20px 0", padding: "14px 14px 12px", borderRadius: 16, background: G.surface, border: `1px solid ${G.line}`, boxShadow: "0 2px 4px rgba(5,22,14,.04), 0 12px 26px -14px rgba(5,22,14,.2)" }}>
+      <h2 id="ds-title" style={{ margin: 0, fontWeight: 800, fontSize: 16, letterSpacing: "-.2px", color: G.ink }}>{t("ds.title")}</h2>
+      <p style={{ margin: "3px 0 10px", fontSize: 12, lineHeight: 1.45, color: G.muted }}>{t("ds.sub")}</p>
+
+      {stores === null ? null : stores.length === 0 ? (
+        <p style={{ margin: "0 0 10px", fontSize: 13, color: G.ink2 }}>{t("ds.none")}</p>
+      ) : (
+        <div style={{ display: "flex", flexDirection: "column", gap: 7, marginBottom: 10 }}>
+          {stores.slice(0, 5).map((s, i) => (
+            <SpotRow key={i} href={dirUrl(s.lat, s.lon)} title={s.name ? `${brandName(s.brand)} · ${s.name}` : brandName(s.brand)} sub={`${s.distKm} km · ${t("ds.pinned")}`} />
+          ))}
+        </div>
+      )}
+
+      {open ? (
+        <div style={{ padding: 12, borderRadius: 12, background: G.bg, border: `1.5px solid ${G.green}` }}>
+          <div style={{ fontSize: 12, fontWeight: 700, color: G.muted, marginBottom: 7 }}>{t("ds.brand")}</div>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 10 }}>
+            {DARK_BRANDS.map((b) => {
+              const on = brand === b;
+              return <button key={b} onClick={() => setBrand(b)} aria-pressed={on} className="rk-focus" style={{ minHeight: 40, padding: "0 13px", borderRadius: 10, cursor: "pointer", fontSize: 13, fontWeight: 700, background: on ? G.green : G.surface, border: `1.5px solid ${on ? G.green : G.line}`, color: on ? "#fff" : G.muted }}>{brandName(b)}</button>;
+            })}
+          </div>
+          <input value={name} onChange={(e) => setName(e.target.value)} maxLength={80} placeholder={t("ds.namePh")} aria-label={t("ds.namePh")} className="rk-focus"
+            style={{ width: "100%", height: 46, borderRadius: 11, border: `1.5px solid ${G.line}`, padding: "0 13px", fontSize: 15, background: G.surface, color: G.ink, marginBottom: 8 }} />
+          <p style={{ margin: "0 0 10px", fontSize: 11.5, lineHeight: 1.45, color: G.muted }}>{t("ds.privacy")}</p>
+          <div style={{ display: "flex", gap: 8 }}>
+            <button onClick={() => { setOpen(false); setMsg(null); }} className="rk-focus" style={{ flex: 1, minHeight: 48, borderRadius: 11, border: `1.5px solid ${G.line}`, background: G.surface, color: G.muted, fontWeight: 700, fontSize: 14, cursor: "pointer" }}>{t("earn.cancel")}</button>
+            <button onClick={pin} disabled={busy} className="rk-focus" style={{ flex: 2, minHeight: 48, borderRadius: 11, border: "none", background: "linear-gradient(180deg,#0B6B48,#064D33)", color: "#fff", fontWeight: 700, fontSize: 14, cursor: busy ? "wait" : "pointer", opacity: busy ? 0.7 : 1 }}>{busy ? t("loc.locating") : t("ds.pinHere")}</button>
+          </div>
+        </div>
+      ) : (
+        <button onClick={() => { setOpen(true); setMsg(null); }} className="rk-focus" style={{ width: "100%", minHeight: 48, borderRadius: 12, background: G.green50, color: G.green700, border: `1.5px dashed ${G.green100}`, fontWeight: 700, fontSize: 13.5, cursor: "pointer" }}>{t("ds.pin")}</button>
+      )}
+      {msg && <p role="status" style={{ margin: "9px 0 0", fontSize: 12.5, fontWeight: 600, color: G.ink2 }}>{msg}</p>}
+    </section>
   );
 }
 
@@ -456,6 +596,8 @@ export default function ShiftsPage() {
   const [coords, setCoords] = useState<{ lat: number; lon: number } | null>(null);
   const [spots, setSpots] = useState<Spot[]>([]);
   const [areas, setAreas] = useState<Area[]>([]);
+  const [clusters, setClusters] = useState<Cluster[]>([]);
+  const [dbBacked, setDbBacked] = useState(false); // true when spots came from our own places database
   const [traffic, setTraffic] = useState<{ level: "light" | "moderate" | "heavy" } | null>(null);
   const [zoneStats, setZoneStats] = useState<Record<string, ZoneStat> | null>(null);
   const [voted, setVoted] = useState<Set<string>>(new Set());
@@ -463,7 +605,7 @@ export default function ShiftsPage() {
 
   // Gate the existing recommendation plan until the browser supplies a location.
   const askLocation = () => {
-    setCoords(null); setZone(null); setSpots([]); setAreas([]); setTraffic(null);
+    setCoords(null); setZone(null); setSpots([]); setAreas([]); setTraffic(null); setClusters([]); setDbBacked(false);
     if (!("geolocation" in navigator)) { setLocationStatus("denied"); return; }
     setLocationStatus("requesting");
     navigator.geolocation.getCurrentPosition(
@@ -509,6 +651,8 @@ export default function ShiftsPage() {
         if (cancelled) return;
         if (Array.isArray(j?.spots)) setSpots(j.spots);
         if (Array.isArray(j?.areas)) setAreas(j.areas);
+        setClusters(Array.isArray(j?.clusters) ? j.clusters : []);
+        setDbBacked(j?.source === "db");
       })
       .catch(() => { /* keep playbook spots */ });
     // Live road congestion (TomTom; no-op without TOMTOM_API_KEY).
@@ -525,7 +669,9 @@ export default function ShiftsPage() {
 
   const now = new Date();
   const locationReady = !!coords && locationStatus === "granted";
-  const allWindows = profession && locationReady ? windowsFor(profession, zone, now, lang) : [];
+  // Real nearby names replace the hand-written landmarks in the plan's sentences.
+  const local = dbBacked ? localLandmarks(clusters, spots) : undefined;
+  const allWindows = profession && locationReady ? windowsFor(profession, zone, now, lang, local) : [];
   const avoidWindow = allWindows.find((w) => w.tag === "avoid");
   const rideWindows = allWindows.filter((w) => w.tag !== "avoid");
   const areaLabel = zone ? zone.label : t("common.ncr");
@@ -623,14 +769,16 @@ export default function ShiftsPage() {
         </div>
       )}
 
+      {profession === "qcom" && locationReady && coords && <DarkStoreCard coords={coords} />}
+
       {/* Windows */}
       {profession && locationReady && <div style={{ padding: "18px 20px 0" }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
           <span style={{ fontWeight: 700, fontSize: 12, letterSpacing: ".7px", textTransform: "uppercase", color: G.faint }}>{t("shifts.allWindows")}</span>
           <span style={{ fontSize: 11.5, fontWeight: 700, color: G.green700 }}>{rideWindows.length} {t("shifts.ride")}{avoidWindow ? ` · 1 ${t("shifts.avoid")}` : ""}</span>
         </div>
-        {rideWindows.map((w, i) => <WindowCard key={i} w={w} idx={i} isAvoid={false} active={isWindowActive(w, now)} spots={spots} areas={areas} areaName={areaLabel} zoneId={zone?.id ?? null} coords={coords} profId={profession} fb={feedback} />)}
-        {avoidWindow && <WindowCard w={avoidWindow} idx={0} isAvoid active={isWindowActive(avoidWindow, now)} spots={spots} areas={areas} areaName={areaLabel} zoneId={zone?.id ?? null} coords={coords} profId={profession} fb={feedback} />}
+        {rideWindows.map((w, i) => <WindowCard key={i} w={w} idx={i} isAvoid={false} active={isWindowActive(w, now)} spots={spots} areas={areas} areaName={areaLabel} zoneId={zone?.id ?? null} coords={coords} profId={profession} fb={feedback} clusters={clusters} dbBacked={dbBacked} />)}
+        {avoidWindow && <WindowCard w={avoidWindow} idx={0} isAvoid active={isWindowActive(avoidWindow, now)} spots={spots} areas={areas} areaName={areaLabel} zoneId={zone?.id ?? null} coords={coords} profId={profession} fb={feedback} clusters={clusters} dbBacked={dbBacked} />}
       </div>}
     </div>
   );
