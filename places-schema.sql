@@ -110,6 +110,8 @@ LANGUAGE sql IMMUTABLE SET search_path = '' AS $$
     WHEN t->>'amenity' IN ('college', 'university') THEN 'college'
     WHEN t->>'place' IN ('suburb', 'neighbourhood', 'quarter') THEN 'locality'
     WHEN t ? 'office' OR t->>'building' IN ('office', 'commercial') OR t->>'landuse' = 'commercial' THEN 'office'
+    -- Noida maps whole sectors as residential land: those are localities, not one society.
+    WHEN t->>'landuse' = 'residential' AND coalesce(t->>'name:en', t->>'name') ~* '^sector[ -]?[0-9]' THEN 'locality'
     WHEN t->>'landuse' = 'residential' OR t->>'building' IN ('apartments', 'residential') THEN 'society'
     ELSE NULL
   END
