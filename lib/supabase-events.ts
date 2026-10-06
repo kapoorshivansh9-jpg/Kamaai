@@ -152,6 +152,15 @@ export async function saveProfile(profile: RideKamaoProfile) {
     updated_at: new Date().toISOString(),
   };
   try {
+    // Preferred path: the save_profile() database function (see
+    // profile-save-function.sql) inserts or updates in one step. It exists
+    // because the update below can't match rows without read access.
+    const rpc = await db.rpc("save_profile", {
+      p_email: row.email, p_name: row.name, p_profession: row.profession,
+      p_language: row.language, p_goals: row.goals, p_weekly_target: row.weekly_target,
+    });
+    if (!rpc.error) return;
+    // Function not installed yet (older database) — fall back to the old path.
     // Insert first. If the email already exists, the unique constraint fires
     // (Postgres code 23505) and we update by email instead. We avoid upsert
     // because ON CONFLICT needs row-read access, which our security rules
