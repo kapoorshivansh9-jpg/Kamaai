@@ -1,0 +1,43 @@
+# Loads Overture Maps places for Delhi NCR into Supabase, then rebuilds the
+# hotspot clusters. Runs monthly, or on demand from the Actions tab.
+#
+# One-time setup — add two repository secrets
+# (GitHub → Settings → Secrets and variables → Actions → New repository secret):
+#   SUPABASE_URL                e.g. https://<project-ref>.supabase.co
+#   SUPABASE_SERVICE_ROLE_KEY   Supabase → Project Settings → API keys → service_role
+# The service-role key can write to the database: never put it in the code or
+# in Vercel's NEXT_PUBLIC_ variables.
+name: Import Overture places
+
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Only report what would be loaded"
+        type: boolean
+        default: false
+  schedule:
+    - cron: "30 21 3 * *"   # 03:00 IST on the 4th of each month
+
+permissions:
+  contents: read
+
+jobs:
+  import:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Download Delhi NCR places from Overture
+        run: |
+          pip install --quiet overturemaps
+          overturemaps download --bbox=76.92,28.38,77.56,28.90 -f geojsonseq --type=place -o places.geojsonl
+          wc -l places.geojsonl
+      - name: Load into Supabase
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: python scripts/import-overture.py places.geojsonl ${{ inputs.dry_run && '--dry-run' || '' }}
