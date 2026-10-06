@@ -7,7 +7,8 @@ import { useProfile } from "@/lib/ridekamao-profile";
 import { windowsFor, detectZone, isWindowActive, PROFESSIONS } from "@/lib/ridekamao-data";
 import { trackEvent, submitSpotFeedback, fetchZoneStats, fetchNearbyDarkStores, addDarkStore, DARK_BRANDS, type ZoneStat, type DarkStore, type DarkBrand } from "@/lib/supabase-events";
 import { supabaseConfigured } from "@/lib/supabase-browser";
-import { rankClusters, placesForWindow, localLandmarks, type Cluster, type RankedCluster, type PlaceSpot } from "@/lib/places";
+import { planDay, localLandmarks, type Cluster, type RankedCluster, type PlaceSpot, type WindowPlan } from "@/lib/places";
+import { readFix, requestFix, wantsLocation, type Fix } from "@/lib/location";
 import { useT, useLang, profTitle, localeTag } from "@/lib/i18n";
 import type { ShiftWindow, Zone, Hotspot } from "@/lib/ridekamao-data";
 
@@ -367,14 +368,14 @@ function DetailPanel({ d, reason, tag, areas, spots, windowId, fb, isMidday, ran
   );
 }
 
-function WindowCard({ w, idx, isAvoid, active, spots, areas, areaName, zoneId, coords, profId, fb, clusters, dbBacked }: { w: ShiftWindow; idx: number; isAvoid: boolean; active?: boolean; spots: Spot[]; areas: Area[]; areaName: string; zoneId: string | null; coords: { lat: number; lon: number } | null; profId: string; fb: Feedback; clusters: Cluster[]; dbBacked: boolean }) {
+function WindowCard({ w, idx, isAvoid, active, spots, areas, areaName, zoneId, coords, profId, fb, dbBacked, plan }: { w: ShiftWindow; idx: number; isAvoid: boolean; active?: boolean; spots: Spot[]; areas: Area[]; areaName: string; zoneId: string | null; coords: { lat: number; lon: number } | null; profId: string; fb: Feedback; dbBacked: boolean; plan?: WindowPlan }) {
   const [open, setOpen] = useState((idx === 0 || !!active) && !isAvoid);
   const tag = TAG[w.tag];
   const t = useT();
   // Database-backed mode: counted clusters and named places replace the old
   // hand-written sub-areas entirely.
-  const ranked = dbBacked ? rankClusters(clusters, profId, w.id) : [];
-  const dbPlaces = dbBacked ? placesForWindow(profId, w.id, spots) : [];
+  const ranked = dbBacked ? plan?.ranked ?? [] : [];
+  const dbPlaces = dbBacked ? plan?.places ?? [] : [];
   const winSpots = dbBacked ? [] : spotsForWindow(profId, w.id, spots);
   const kinds = WINDOW_KINDS[profId]?.[w.id] ?? null;
   const matchKind = (s: Spot) => !kinds || kinds.includes(s.kind);
@@ -603,25 +604,41 @@ export default function ShiftsPage() {
   const [voted, setVoted] = useState<Set<string>>(new Set());
   const [locationStatus, setLocationStatus] = useState<"idle" | "requesting" | "granted" | "denied">("idle");
 
-  // Gate the existing recommendation plan until the browser supplies a location.
-  const askLocation = () => {
-    setCoords(null); setZone(null); setSpots([]); setAreas([]); setTraffic(null); setClusters([]); setDbBacked(false);
-    if (!("geolocation" in navigator)) { setLocationStatus("denied"); return; }
-    setLocationStatus("requesting");
-    navigator.geolocation.getCurrentPosition(
-      (pos) => {
-        const lat = pos.coords.latitude, lon = pos.coords.longitude;
-        if (!Number.isFinite(lat) || !Number.isFinite(lon) || pos.timestamp > Date.now() + 60000 || Date.now() - pos.timestamp > 15 * 60 * 1000) {
-          setLocationStatus("denied"); return;
-        }
-        setZone(detectZone(lat, lon));
-        setCoords({ lat: Math.round(lat * 100) / 100, lon: Math.round(lon * 100) / 100 });
-        setLocationStatus("granted");
-      },
-      () => setLocationStatus("denied"),
-      { timeout: 10000, maximumAge: 0, enableHighAccuracy: true }
-    );
+  // The plan needs a location. The fix is shared across tabs (lib/location.ts),
+  // so a rider who has turned location on is not asked again on every visit.
+  const applyFix = (f: Fix) => {
+    setZone(detectZone(f.lat, f.lon));
+    setCoords({ lat: f.lat, lon: f.lon });
+    setLocationStatus("granted");
   };
+  const askLocation = async () => {
+    setCoords(null); setZone(null); setSpots([]); setAreas([]); setTraffic(null); setClusters([]); setDbBacked(false);
+    setLocationStatus("requesting");
+    const f = await requestFix();
+    if (f) applyFix(f); else setLocationStatus("denied");
+  };
+  useEffect(() => {
+    (async () => {
+      const f = readFix();
+      if (f) applyFix(f);
+      else if (wantsLocation()) await askLocation();
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Rotation seed: different for each device and each day, so close contenders
+  // take turns and riders are not all sent to the same spot.
+  const [deviceSeed, setDeviceSeed] = useState("");
+  useEffect(() => {
+    (async () => {
+      let v = "";
+      try {
+        v = localStorage.getItem("rk-seed") || "";
+        if (!v) { v = Math.random().toString(36).slice(2, 10); localStorage.setItem("rk-seed", v); }
+      } catch { v = "shared"; }
+      setDeviceSeed(v);
+    })();
+  }, []);
 
   useEffect(() => {
     if (!profile) return;
@@ -672,6 +689,10 @@ export default function ShiftsPage() {
   // Real nearby names replace the hand-written landmarks in the plan's sentences.
   const local = dbBacked ? localLandmarks(clusters, spots) : undefined;
   const allWindows = profession && locationReady ? windowsFor(profession, zone, now, lang, local) : [];
+  // Plan every window together so later windows move on to other areas.
+  const windowKey = allWindows.map((w) => w.id).join(",");
+  const dayKey = `${now.getFullYear()}-${now.getMonth() + 1}-${now.getDate()}`;
+  const plan = dbBacked && profession && windowKey ? planDay(windowKey.split(","), profession, clusters, spots, `${deviceSeed}|${dayKey}`) : {};
   const avoidWindow = allWindows.find((w) => w.tag === "avoid");
   const rideWindows = allWindows.filter((w) => w.tag !== "avoid");
   const areaLabel = zone ? zone.label : t("common.ncr");
@@ -777,8 +798,8 @@ export default function ShiftsPage() {
           <span style={{ fontWeight: 700, fontSize: 12, letterSpacing: ".7px", textTransform: "uppercase", color: G.faint }}>{t("shifts.allWindows")}</span>
           <span style={{ fontSize: 11.5, fontWeight: 700, color: G.green700 }}>{rideWindows.length} {t("shifts.ride")}{avoidWindow ? ` · 1 ${t("shifts.avoid")}` : ""}</span>
         </div>
-        {rideWindows.map((w, i) => <WindowCard key={i} w={w} idx={i} isAvoid={false} active={isWindowActive(w, now)} spots={spots} areas={areas} areaName={areaLabel} zoneId={zone?.id ?? null} coords={coords} profId={profession} fb={feedback} clusters={clusters} dbBacked={dbBacked} />)}
-        {avoidWindow && <WindowCard w={avoidWindow} idx={0} isAvoid active={isWindowActive(avoidWindow, now)} spots={spots} areas={areas} areaName={areaLabel} zoneId={zone?.id ?? null} coords={coords} profId={profession} fb={feedback} clusters={clusters} dbBacked={dbBacked} />}
+        {rideWindows.map((w, i) => <WindowCard key={i} w={w} idx={i} isAvoid={false} active={isWindowActive(w, now)} spots={spots} areas={areas} areaName={areaLabel} zoneId={zone?.id ?? null} coords={coords} profId={profession} fb={feedback} dbBacked={dbBacked} plan={plan[w.id]} />)}
+        {avoidWindow && <WindowCard w={avoidWindow} idx={0} isAvoid active={isWindowActive(avoidWindow, now)} spots={spots} areas={areas} areaName={areaLabel} zoneId={zone?.id ?? null} coords={coords} profId={profession} fb={feedback} dbBacked={dbBacked} plan={plan[avoidWindow.id]} />}
       </div>}
     </div>
   );

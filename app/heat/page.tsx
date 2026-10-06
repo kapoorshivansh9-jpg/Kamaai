@@ -8,6 +8,7 @@ import { fetchNearbyWaterPoints, addWaterPoint } from "@/lib/supabase-events";
 import { supabaseConfigured } from "@/lib/supabase-browser";
 import type { HeatMetric, SattuPoint } from "@/lib/ridekamao-data";
 import { ForecastSection } from "@/components/forecast-section";
+import { readFix, requestFix, wantsLocation, FIX_MAX_AGE_MS, type Fix } from "@/lib/location";
 
 const G = {
   ink: "#05160E", ink2: "#163022", muted: "#456055", faint: "#7A9A8A",
@@ -242,42 +243,43 @@ export default function HeatPage() {
       if (r.ok && j.status === "ok" && Array.isArray(j.points)) setWater(j.points);
     } catch { /* unavailable is not sample */ }
   };
-  const locate = (userAsked: boolean) => {
+  // Weather barely changes over a few km, so an approximate fix (Wi-Fi or cell
+  // tower, common on laptops and indoors) is good enough for it. Nearby places
+  // need a fix accurate to 2 km.
+  const applyFix = (f: Fix, userAsked: boolean) => {
+    if (f.accuracy <= 25000) loadWeather(f.lat, f.lon, "local");
+    if (f.accuracy <= 2000) { setLocatedAt(f.at); loadPlaces(f.lat, f.lon); }
+    else { setLocatedAt(null); setCoords(null); setWater(null); if (userAsked) setRough(true); }
+  };
+  const locate = async (userAsked: boolean) => {
     if (userAsked) setLocationRequested(true);
     setRough(false);
-    if (!("geolocation" in navigator)) return;
-    navigator.geolocation.getCurrentPosition(
-      (pos) => {
-        if (pos.timestamp > Date.now() + 60000 || Date.now() - pos.timestamp > 15 * 60 * 1000) return;
-        const lat = Math.round(pos.coords.latitude * 100) / 100, lon = Math.round(pos.coords.longitude * 100) / 100;
-        if (!Number.isFinite(lat) || !Number.isFinite(lon)) return;
-        const acc = pos.coords.accuracy;
-        // Weather barely changes over a few km, so an approximate fix (Wi-Fi or
-        // cell tower, common on laptops and indoors) is still good enough for it.
-        if (Number.isFinite(acc) && acc <= 25000) loadWeather(lat, lon, "local");
-        if (Number.isFinite(acc) && acc <= 2000) { setLocatedAt(pos.timestamp); loadPlaces(lat, lon); }
-        else { setLocatedAt(null); setCoords(null); setWater(null); if (userAsked) setRough(true); }
-      },
-      () => { setLocatedAt(null); setCoords(null); setWater(null); },
-      { timeout: 10000, maximumAge: 0, enableHighAccuracy: true }
-    );
+    const f = await requestFix(); // shared with the other tabs; falls back to network location
+    if (f) applyFix(f, userAsked);
+    else { setLocatedAt(null); setCoords(null); setWater(null); }
   };
-  const askLocation = () => locate(true);
+  const askLocation = () => { locate(true); };
 
-  // On open: show regional weather straight away, and if this rider has already
-  // allowed location on this device, switch to their area without another tap.
+  // On open: show regional weather straight away, then switch to the rider's
+  // area without another tap if a recent fix exists or location was turned on
+  // before on this device.
   useEffect(() => {
     (async () => {
+      const stored = readFix();
+      if (stored) { applyFix(stored, false); return; }
       await loadWeather(NCR_CENTRE.lat, NCR_CENTRE.lon, "ncr");
+      let granted = wantsLocation();
       try {
         const st = await navigator.permissions?.query({ name: "geolocation" });
-        if (st?.state === "granted") locate(false);
-      } catch { /* Permissions API missing — the button still works */ }
+        if (st?.state === "granted") granted = true;
+        if (st?.state === "denied") granted = false;
+      } catch { /* Permissions API missing — fall back to the stored choice */ }
+      if (granted) await locate(false);
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const locationReady = !!(coords && locatedAt && clock - locatedAt < 15 * 60 * 1000);
+  const locationReady = !!(coords && locatedAt && clock - locatedAt < FIX_MAX_AGE_MS);
   const fresh = (at?: string | null) => {
     if (!at) return false;
     const time = Date.parse(at.endsWith("Z") ? at : `${at}Z`);

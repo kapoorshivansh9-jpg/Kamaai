@@ -79,26 +79,112 @@ export function windowCount(c: Cluster, prof: string, windowId: string): number 
 
 export interface RankedCluster { cluster: Cluster; count: number; score: number }
 
+// How far a rider is asked to look. Areas across this whole radius compete; a
+// strong area 6 km away can beat a weak one next door.
+export const SEARCH_RADIUS_KM = 10;
+// Distance costs a rider time and fuel, but gently: an area 6 km away keeps
+// half its score. (Quick-commerce is different — see QCOM_DIST_KM.)
+const DIST_HALF_KM = 6;
+// Quick-commerce drops are short hops from the rider's own store.
+const QCOM_DIST_KM = 1.5;
+// Picks shown together must be at least this far apart, so they are different
+// areas and not three corners of one market.
+const MIN_GAP_KM = 1.0;
+// Each time an area has already been suggested earlier in the day, its score is
+// multiplied by this, so later windows move on to other areas.
+const REPEAT_PENALTY = 0.45;
+
+// Home orders matter more at these times, so housing near a cluster counts.
+const HOME_ORDER_WINDOWS = new Set(["breakfast", "dinner", "late"]);
+
+/** Deterministic number in [0, 1) from a string — same input, same output. */
+function hash01(str: string): number {
+  let h = 2166136261;
+  for (let i = 0; i < str.length; i++) { h ^= str.charCodeAt(i); h = Math.imul(h, 16777619); }
+  return ((h >>> 0) % 100000) / 100000;
+}
 /**
- * Best clusters for a window: more relevant places is better, closer is better,
- * and rider votes move it up or down. A cluster needs at least 3 relevant places.
- *   score = count / (1 + distance_km / 1.5) + 2 × (busy − quiet votes)
- * The areas shown are spaced at least 400 m apart so the three picks differ.
+ * A small nudge (±12%) that differs by rider, by day and by window. Without it
+ * every rider is sent to the same top spot every day; with it, close contenders
+ * take turns and riders spread out. Clear winners still win.
  */
-export function rankClusters(clusters: Cluster[], prof: string, windowId: string, limit = 3): RankedCluster[] {
-  const ranked = clusters
-    .map((cluster) => {
-      const count = windowCount(cluster, prof, windowId);
-      return { cluster, count, score: count / (1 + cluster.distKm / 1.5) + 2 * (cluster.busy - cluster.quiet) };
-    })
-    .filter((r) => r.count >= 3)
-    .sort((a, b) => b.score - a.score || a.cluster.distKm - b.cluster.distKm);
-  const out: RankedCluster[] = [];
-  for (const r of ranked) {
-    if (out.every((o) => approxKm(o.cluster, r.cluster) > 0.4)) out.push(r);
-    if (out.length >= limit) break;
+function rotation(seed: string, key: string): number {
+  return 0.88 + 0.24 * hash01(`${seed}|${key}`);
+}
+
+export interface WindowPlan { ranked: RankedCluster[]; places: PlaceSpot[] }
+
+/**
+ * Plan the whole day in one pass so the windows don't repeat each other.
+ *
+ * Clusters (food, nightlife):
+ *   score = relevant places × home-order boost ÷ (1 + km ÷ 6) + 2 × (busy − quiet votes)
+ * Single places (metro, mall, hospital, …):
+ *   score = (1 + notable + 0.3 × other useful places within 800 m, max 6) ÷ (1 + km ÷ 6)
+ * Both are then multiplied by the rotation nudge and by 0.45 for every earlier
+ * window that already suggested the same area. Picks in one window are at
+ * least 1 km apart. `seed` should change per rider and per day.
+ */
+export function planDay(windowIds: string[], prof: string, clusters: Cluster[], spots: PlaceSpot[], seed: string): Record<string, WindowPlan> {
+  const used = new Map<string, number>();
+  const penalty = (key: string) => Math.pow(REPEAT_PENALTY, used.get(key) ?? 0);
+  const mark = (key: string) => used.set(key, (used.get(key) ?? 0) + 1);
+  const half = prof === "qcom" ? QCOM_DIST_KM : DIST_HALF_KM;
+  const plan: Record<string, WindowPlan> = {};
+
+  // How built-up the surroundings of a place are, from the other places we know.
+  const neighbours = new Map<PlaceSpot, number>();
+  for (const s of spots) {
+    let n = 0;
+    for (const o of spots) if (o !== s && approxKm(s, o) <= 0.8) n++;
+    neighbours.set(s, Math.min(n, 6));
   }
-  return out;
+
+  for (const windowId of windowIds) {
+    // ── clusters ──
+    const rankedAll = clusters
+      .map((cluster) => {
+        const count = windowCount(cluster, prof, windowId);
+        const boost = cluster.grp === "food" && HOME_ORDER_WINDOWS.has(windowId) ? 1 + Math.min(cluster.societiesNearby, 30) / 60 : 1;
+        const base = (count * boost) / (1 + cluster.distKm / half) + 2 * (cluster.busy - cluster.quiet);
+        return { cluster, count, score: base * rotation(seed, `${windowId}|${cluster.key}`) * penalty(cluster.key) };
+      })
+      .filter((r) => r.count >= 3)
+      .sort((a, b) => b.score - a.score || a.cluster.distKm - b.cluster.distKm);
+    const ranked: RankedCluster[] = [];
+    for (const r of rankedAll) {
+      if (ranked.every((o) => approxKm(o.cluster, r.cluster) >= MIN_GAP_KM)) ranked.push(r);
+      if (ranked.length >= 3) break;
+    }
+    ranked.forEach((r) => mark(r.cluster.key));
+
+    // ── single places ──
+    const kinds = PLACE_WINDOW_KINDS[prof]?.[windowId];
+    const places: PlaceSpot[] = [];
+    if (kinds) {
+      const perKind: Record<string, number> = {};
+      const maxPerKind = kinds.length === 1 ? 4 : 2;
+      const gap = prof === "qcom" ? 0.3 : MIN_GAP_KM;
+      const sorted = spots
+        .filter((s) => kinds.includes(s.kind))
+        .map((s) => {
+          const key = `p:${s.kind}:${s.name}`;
+          const base = (1 + (s.notable ? 1 : 0) + 0.3 * (neighbours.get(s) ?? 0)) / (1 + s.distKm / half);
+          return { s, key, score: base * rotation(seed, `${windowId}|${key}`) * penalty(key) };
+        })
+        .sort((a, b) => b.score - a.score || a.s.distKm - b.s.distKm);
+      for (const c of sorted) {
+        if ((perKind[c.s.kind] ?? 0) >= maxPerKind) continue;
+        if (!places.every((o) => approxKm(o, c.s) >= gap)) continue;
+        perKind[c.s.kind] = (perKind[c.s.kind] ?? 0) + 1;
+        places.push(c.s);
+        mark(c.key);
+        if (places.length >= 4) break;
+      }
+    }
+    plan[windowId] = { ranked, places };
+  }
+  return plan;
 }
 
 function approxKm(a: { lat: number; lon: number }, b: { lat: number; lon: number }): number {
@@ -154,25 +240,3 @@ const PLACE_WINDOW_KINDS: Record<string, Record<string, string[]>> = {
   // Quick-commerce riders wait at their own store; societies are where the orders go.
   qcom: { "morning-grocery": ["Society"], midday: ["Society"], "pre-evening": ["Society"], evening: ["Society"], late: ["Society"] },
 };
-
-/**
- * Up to `limit` named places for a window: nearest first, a known/notable place
- * counts as 0.5 km closer, and no more than 3 of one kind so the list has variety.
- * Food riders get clusters instead, so this returns nothing for them.
- */
-export function placesForWindow(prof: string, windowId: string, spots: PlaceSpot[], limit = 5): PlaceSpot[] {
-  const kinds = PLACE_WINDOW_KINDS[prof]?.[windowId];
-  if (!kinds) return [];
-  const perKind: Record<string, number> = {};
-  const out: PlaceSpot[] = [];
-  const sorted = spots
-    .filter((s) => kinds.includes(s.kind))
-    .sort((a, b) => (a.distKm - (a.notable ? 0.5 : 0)) - (b.distKm - (b.notable ? 0.5 : 0)));
-  for (const s of sorted) {
-    if ((perKind[s.kind] ?? 0) >= (kinds.length === 1 ? limit : 3)) continue;
-    perKind[s.kind] = (perKind[s.kind] ?? 0) + 1;
-    out.push(s);
-    if (out.length >= limit) break;
-  }
-  return out;
-}
