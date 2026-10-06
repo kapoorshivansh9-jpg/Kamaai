@@ -235,9 +235,12 @@ BEGIN
     ), sub AS (
       SELECT *, extensions.st_clusterkmeans(g32, 1, 300) OVER (PARTITION BY cid) AS sid FROM db WHERE cid IS NOT NULL
     ), agg AS (
-      SELECT cid, sid, count(*)::int AS n, avg(lat) AS lat, avg(lon) AS lon,
-             (array_agg(name ORDER BY notable DESC, length(name), name))[1:3] AS top_places
+      SELECT cid, sid, count(*)::int AS n, avg(lat) AS lat, avg(lon) AS lon
       FROM sub GROUP BY cid, sid HAVING count(*) >= g.minpts
+    ), tp AS (
+      -- Up to 3 recognisable members, each name once (a cluster can hold two Domino's).
+      SELECT cid, sid, (array_agg(name ORDER BY nb DESC, length(name), name))[1:3] AS top_places
+      FROM (SELECT cid, sid, name, bool_or(notable) AS nb FROM sub GROUP BY cid, sid, name) q GROUP BY cid, sid
     ), kc AS (
       SELECT cid, sid, jsonb_object_agg(kind, c) AS kinds
       FROM (SELECT cid, sid, kind, count(*) AS c FROM sub GROUP BY cid, sid, kind) k GROUP BY cid, sid
@@ -245,9 +248,9 @@ BEGIN
       SELECT a.cid, a.sid, ceil(max(extensions.st_distance(s.geom, extensions.st_setsrid(extensions.st_makepoint(a.lon, a.lat), 4326)::extensions.geography)))::int AS radius_m
       FROM agg a JOIN sub s ON s.cid = a.cid AND s.sid = a.sid GROUP BY a.cid, a.sid
     ), c AS (
-      SELECT a.*, kc.kinds, rad.radius_m,
+      SELECT a.*, kc.kinds, rad.radius_m, tp.top_places,
              extensions.st_setsrid(extensions.st_makepoint(a.lon, a.lat), 4326)::extensions.geography AS cg
-      FROM agg a JOIN kc USING (cid, sid) JOIN rad USING (cid, sid)
+      FROM agg a JOIN kc USING (cid, sid) JOIN rad USING (cid, sid) JOIN tp USING (cid, sid)
     ), ins AS (
       INSERT INTO public.hotspot_clusters (key, grp, name, lat, lon, place_count, radius_m, kinds, top_places, societies_nearby, computed_at)
       SELECT DISTINCT ON (1) g.grp || '@' || round(c.lat::numeric, 4) || ',' || round(c.lon::numeric, 4),
@@ -255,9 +258,12 @@ BEGIN
              left(coalesce(
                anchor.name,
                loc.name || ' · near ' || c.top_places[1],
+               'Near ' || c.top_places[1] || ', ' || metro.name || ' Metro',
                'Near ' || c.top_places[1]), 120),
              c.lat, c.lon, c.n, greatest(c.radius_m, 30), c.kinds, c.top_places,
-             (SELECT count(*) FROM public.places so WHERE so.kind = 'society' AND extensions.st_dwithin(so.geom, c.cg, 1500))::int,
+             -- "Block B, …" / "Tower 3" are parts of one society, so they are not counted.
+             (SELECT count(*) FROM public.places so WHERE so.kind = 'society' AND so.name !~* '^(block|tower|pocket|wing|gate)\M'
+                AND extensions.st_dwithin(so.geom, c.cg, 1500))::int,
              now()
       FROM c
       LEFT JOIN LATERAL (
@@ -270,6 +276,11 @@ BEGIN
         WHERE p.kind = 'locality' AND extensions.st_dwithin(p.geom, c.cg, 1200)
         ORDER BY extensions.st_distance(p.geom, c.cg) LIMIT 1
       ) loc ON true
+      LEFT JOIN LATERAL (
+        SELECT regexp_replace(p.name, '\s*metro( station)?$', '', 'i') AS name FROM public.places p
+        WHERE p.kind = 'metro' AND extensions.st_dwithin(p.geom, c.cg, 2000)
+        ORDER BY extensions.st_distance(p.geom, c.cg) LIMIT 1
+      ) metro ON true
       ORDER BY 1, c.n DESC
       ON CONFLICT (key) DO UPDATE SET
         name = EXCLUDED.name, lat = EXCLUDED.lat, lon = EXCLUDED.lon, place_count = EXCLUDED.place_count,
@@ -322,6 +333,7 @@ LANGUAGE sql STABLE SET search_path = '' AS $$
     WHERE p.kind = ANY (p_kinds)
       AND (p.source <> 'osm' OR p.updated_at > now() - interval '75 days')
       AND (p.source = 'osm' OR coalesce(p.confidence, 0) >= 0.75)
+      AND NOT (p.kind = 'society' AND p.name ~* '^(block|tower|pocket|wing|gate)\M')
       AND extensions.st_dwithin(p.geom, me.g, least(greatest(p_radius_km, 0.5), 15) * 1000)
   ), ranked AS (
     SELECT *, row_number() OVER (PARTITION BY kind ORDER BY d) AS rn FROM near WHERE dup = 1
