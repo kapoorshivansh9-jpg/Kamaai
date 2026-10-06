@@ -139,6 +139,50 @@ export async function fetchZoneStats(profession: string): Promise<Record<string,
   }
 }
 
+// ── Rider-pinned dark stores (quick-commerce) ─────────────────
+// No public dataset lists dark stores, so riders pin their own. The pin is the
+// STORE's position and carries no rider id.
+export const DARK_BRANDS = ["blinkit", "zepto", "instamart", "bigbasket", "other"] as const;
+export type DarkBrand = (typeof DARK_BRANDS)[number];
+export interface DarkStore { brand: DarkBrand; name: string | null; lat: number; lon: number; distKm: number }
+
+/** Pinned dark stores near a point, nearest first; null if Supabase isn't set up or the table is missing. */
+export async function fetchNearbyDarkStores(lat: number, lon: number, radiusKm = 4): Promise<DarkStore[] | null> {
+  const db = getClient();
+  if (!db) return null;
+  const dLat = radiusKm / 111;
+  const dLon = radiusKm / (111 * Math.max(0.2, Math.cos((lat * Math.PI) / 180)));
+  try {
+    const { data, error } = await db.from("dark_stores").select("brand,name,lat,lon")
+      .gte("lat", lat - dLat).lte("lat", lat + dLat).gte("lon", lon - dLon).lte("lon", lon + dLon).limit(200);
+    if (error || !data) return null;
+    return (data as { brand: DarkBrand; name: string | null; lat: number; lon: number }[])
+      .map((p) => ({ ...p, distKm: Math.round(haversineKm(lat, lon, p.lat, p.lon) * 10) / 10 }))
+      .filter((p) => p.distKm <= radiusKm)
+      .sort((a, b) => a.distKm - b.distKm)
+      .slice(0, 12);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Pin a dark store. Returns "added", "exists" (the same brand is already
+ * pinned within 80 m) or "failed".
+ */
+export async function addDarkStore(lat: number, lon: number, brand: DarkBrand, name: string): Promise<"added" | "exists" | "failed"> {
+  const db = getClient();
+  if (!db) return "failed";
+  try {
+    const near = await fetchNearbyDarkStores(lat, lon, 0.3);
+    if (near?.some((s) => s.brand === brand && haversineKm(lat, lon, s.lat, s.lon) <= 0.08)) return "exists";
+    const { error } = await db.from("dark_stores").insert({ lat, lon, brand, name: name.trim().slice(0, 80) || null });
+    return error ? "failed" : "added";
+  } catch {
+    return "failed";
+  }
+}
+
 export async function saveProfile(profile: RideKamaoProfile) {
   const db = getClient();
   if (!db || !profile.email) return;

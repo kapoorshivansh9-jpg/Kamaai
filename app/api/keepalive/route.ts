@@ -18,6 +18,7 @@ export async function GET() {
   const timer = setTimeout(() => ctrl.abort(), 8000);
   let ok = false;
   let status = 0; // HTTP status from Supabase; 0 = no answer (timeout / DNS / network)
+  let error = ""; // error class only — messages can echo header values, so they are not returned
   try {
     const r = await fetch(`${url.replace(/\/$/, "")}/rest/v1/water_points?select=id&limit=1`, {
       headers: { apikey: key, Authorization: `Bearer ${key}` },
@@ -26,8 +27,9 @@ export async function GET() {
     });
     ok = r.ok;
     status = r.status;
-  } catch {
+  } catch (e) {
     ok = false;
+    error = e instanceof Error ? e.name : "unknown";
   } finally {
     clearTimeout(timer);
   }
@@ -38,5 +40,9 @@ export async function GET() {
   // shows up as a failed cron run in the Vercel dashboard.
   let project = "";
   try { project = new URL(url).host.split(".")[0]; } catch { /* malformed URL */ }
-  return Response.json({ ok, status, project }, { status: ok ? 200 : 503 });
+  // A key pasted with a stray space or line break makes every request throw
+  // before it is sent, so report the key's shape (never the key itself).
+  const keyShape = key !== key.trim() ? "has-whitespace" : !/^[\w.\-]+$/.test(key) ? "bad-characters" : key.startsWith("eyJ") ? "legacy-jwt" : key.startsWith("sb_publishable_") ? "publishable" : "unknown-format";
+  const urlShape = url !== url.trim() ? "has-whitespace" : "ok";
+  return Response.json({ ok, status, error, project, keyShape, urlShape, keyLength: key.length }, { status: ok ? 200 : 503 });
 }

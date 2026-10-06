@@ -179,17 +179,21 @@ const ZONE_EXTRA: Record<string, { mall: string; residential: string }> = {
 };
 const AIRPORT = "IGI Airport T1 / T2 / T3";
 
-// Replace {tokens} in playbook text with this zone's real landmark names.
-function fillTokens(s: string, L: Landmarks, zoneId: string | null): string {
+/** Real nearby names (from the places database) that override the hand-written ones. */
+export type LocalNames = Partial<Record<"metro" | "market" | "office" | "food" | "nightlife" | "mall" | "residential", string>>;
+
+// Replace {tokens} in playbook text with real landmark names: the rider's
+// actual nearest places when we have them, else this zone's hand-written ones.
+function fillTokens(s: string, L: Landmarks, zoneId: string | null, local?: LocalNames): string {
   const x = (zoneId && ZONE_EXTRA[zoneId]) || { mall: L.market, residential: "nearby residential colonies" };
   return s
-    .replace(/\{metro\}/g, L.metro)
-    .replace(/\{market\}/g, L.market)
-    .replace(/\{office\}/g, L.office)
-    .replace(/\{food\}/g, L.food)
-    .replace(/\{nightlife\}/g, L.nightlife)
-    .replace(/\{mall\}/g, x.mall)
-    .replace(/\{residential\}/g, x.residential)
+    .replace(/\{metro\}/g, local?.metro || L.metro)
+    .replace(/\{market\}/g, local?.market || L.market)
+    .replace(/\{office\}/g, local?.office || L.office)
+    .replace(/\{food\}/g, local?.food || L.food)
+    .replace(/\{nightlife\}/g, local?.nightlife || L.nightlife)
+    .replace(/\{mall\}/g, local?.mall || x.mall)
+    .replace(/\{residential\}/g, local?.residential || x.residential)
     .replace(/\{airport\}/g, AIRPORT);
 }
 
@@ -534,13 +538,13 @@ const PLAYBOOK: Record<string, WinSpec[]> = {
   ],
 };
 
-export function windowsFor(profId: string, zone: Zone | null = null, now: Date = new Date(), lang: string = "en"): ShiftWindow[] {
+export function windowsFor(profId: string, zone: Zone | null = null, now: Date = new Date(), lang: string = "en", local?: LocalNames): ShiftWindow[] {
   const hi = lang === "hi";
   const L = (zone && ZONE_LANDMARKS[zone.id]) || NCR_DEFAULT;
   const zoneId = zone?.id ?? null;
   const specs = PLAYBOOK[profId] ?? PLAYBOOK.food;
   const events = currentEvents(now, lang);
-  const f = (b: Bi) => fillTokens(bi(b, hi), L, zoneId);
+  const f = (b: Bi) => fillTokens(bi(b, hi), L, zoneId, local);
 
   return specs.map((s) => ({
     id: s.id,

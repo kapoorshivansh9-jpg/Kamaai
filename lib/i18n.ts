@@ -148,6 +148,17 @@ const en = {
   "fc.uv.all": "The sun is strong enough to burn skin within half an hour. Wear full sleeves and cover your neck and face while you wait.",
   "fc.cold.all": "Early and late shifts will be cold, more so on a moving vehicle. Wear layers, gloves and something that covers your ears.",
   "fc.clear.all": "Nothing in the forecast should stop a normal day's work. Carry water as usual.",
+  // Shifts tab — counted spots from the places database, and rider-pinned dark stores
+  "d.countedSpots": "Spots to wait at", "d.namedPlaces": "Named places near you", "d.drops": "Societies near you, where orders go",
+  "d.cFood": "{n} food places within {m} m", "d.cFoodWindow": "{n} of {total} food places here suit this time, within {m} m", "d.cNight": "{n} bars and clubs within {m} m",
+  "d.cSoc": "{s} societies within 1.5 km", "d.includes": "Includes {names}",
+  "d.dataNote": "Counts come from OpenStreetMap map data, refreshed monthly. They show how many places are there, not how many orders.",
+  "ds.title": "Your dark store", "ds.sub": "No public list of dark stores exists, so riders build this map together.",
+  "ds.none": "No store is pinned near you yet.", "ds.pin": "Pin my store", "ds.pinHere": "Pin this spot", "ds.pinned": "pinned by a rider",
+  "ds.brand": "Which app is the store for?", "ds.namePh": "Store name or landmark (optional)", "ds.other": "Other",
+  "ds.privacy": "Pin only while you are at the store. This saves the store's location with no link to you, and other riders can see it.",
+  "ds.added": "Pinned. Thank you.", "ds.exists": "This store is already on the map.", "ds.failed": "The pin could not be saved. Try again.",
+  "ds.needGps": "Your location is not accurate enough to pin a store. Step outside and try again.",
 } as const;
 
 type Key = keyof typeof en;
@@ -268,6 +279,16 @@ const hi: Record<Key, string> = {
   "fc.uv.all": "धूप इतनी तेज़ है कि आधे घंटे में त्वचा जल सकती है। पूरी बाँह के कपड़े पहनें और इंतज़ार करते समय गर्दन व चेहरा ढकें।",
   "fc.cold.all": "सुबह और देर रात की शिफ्ट ठंडी रहेगी, चलती गाड़ी पर और ज़्यादा। कई परतें, दस्ताने और कान ढकने वाला कुछ पहनें।",
   "fc.clear.all": "पूर्वानुमान में ऐसा कुछ नहीं है जो आम दिन के काम को रोके। हमेशा की तरह पानी साथ रखें।",
+  "d.countedSpots": "इंतज़ार करने की जगहें", "d.namedPlaces": "आपके पास की नामी जगहें", "d.drops": "आपके पास की सोसाइटी, जहाँ ऑर्डर जाते हैं",
+  "d.cFood": "{m} मीटर के अंदर खाने की {n} जगहें", "d.cFoodWindow": "यहाँ खाने की {total} जगहों में से {n} इस समय के लिए ठीक हैं, {m} मीटर के अंदर", "d.cNight": "{m} मीटर के अंदर {n} बार और क्लब",
+  "d.cSoc": "1.5 किमी के अंदर {s} सोसाइटी", "d.includes": "इनमें शामिल: {names}",
+  "d.dataNote": "गिनती OpenStreetMap के नक़्शे के डेटा से है, जो हर महीने अपडेट होता है। यह बताती है कि वहाँ कितनी जगहें हैं, यह नहीं कि कितने ऑर्डर आएँगे।",
+  "ds.title": "आपका डार्क स्टोर", "ds.sub": "डार्क स्टोर की कोई सार्वजनिक सूची नहीं है, इसलिए राइडर मिलकर यह नक़्शा बनाते हैं।",
+  "ds.none": "आपके पास अभी कोई स्टोर पिन नहीं है।", "ds.pin": "मेरा स्टोर पिन करें", "ds.pinHere": "यह जगह पिन करें", "ds.pinned": "राइडर ने पिन किया",
+  "ds.brand": "स्टोर किस ऐप का है?", "ds.namePh": "स्टोर का नाम या पहचान (ज़रूरी नहीं)", "ds.other": "अन्य",
+  "ds.privacy": "तभी पिन करें जब आप स्टोर पर हों। इससे सिर्फ़ स्टोर की लोकेशन सेव होती है, आपसे कोई जुड़ाव नहीं रहता, और दूसरे राइडर इसे देख सकते हैं।",
+  "ds.added": "पिन हो गया। धन्यवाद।", "ds.exists": "यह स्टोर पहले से नक़्शे पर है।", "ds.failed": "पिन सेव नहीं हो पाया। दोबारा कोशिश करें।",
+  "ds.needGps": "स्टोर पिन करने के लिए आपकी लोकेशन पूरी तरह सटीक नहीं है। बाहर जाकर दोबारा कोशिश करें।",
 };
 
 // Punjabi (Gurmukhi)
