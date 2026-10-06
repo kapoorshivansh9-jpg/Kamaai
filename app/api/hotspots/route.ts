@@ -14,6 +14,7 @@
 // Mirrors the resilient pattern in /api/water (race mirrors, hard timeout, cache).
 
 import { z } from "zod";
+import { supabaseEnv } from "@/lib/supabase-env";
 import { KIND_LABEL, PROF_PLACE_KINDS, PROF_CLUSTER_GROUPS, type Cluster, type PlaceSpot } from "@/lib/places";
 
 const Q = z.object({
@@ -67,13 +68,13 @@ const dbCache = new Map<string, { at: number; data: { clusters: Cluster[]; spots
 const DB_TTL = 5 * 60 * 1000; // short: rider votes should show up soon
 
 async function rpc<T>(fn: string, body: Record<string, unknown>): Promise<T[] | null> {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-  if (!url || !key || !url.startsWith("http")) return null;
+  const env = supabaseEnv();
+  if (!env) return null;
+  const { url, key } = env;
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), DB_TIMEOUT_MS);
   try {
-    const r = await fetch(`${url.replace(/\/$/, "")}/rest/v1/rpc/${fn}`, {
+    const r = await fetch(`${url}/rest/v1/rpc/${fn}`, {
       method: "POST",
       headers: { apikey: key, Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
       body: JSON.stringify(body),

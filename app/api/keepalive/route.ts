@@ -5,13 +5,17 @@
 // it does one tiny public read so the project always counts as active.
 // It reads nothing private (water_points is already public) and writes nothing.
 
+import { supabaseEnv } from "@/lib/supabase-env";
+
 const TTL = 60 * 60 * 1000; // answer repeat calls from memory, so this can't be used to hammer the DB
 let last: { at: number; ok: boolean } | null = null;
 
 export async function GET() {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-  if (!url || !key || !url.startsWith("http")) return Response.json({ ok: false, reason: "not-configured" });
+  const env = supabaseEnv();
+  if (!env) return Response.json({ ok: false, reason: "not-configured" });
+  const { url, key } = env;
+  const rawUrl = process.env.NEXT_PUBLIC_SUPABASE_URL ?? "";
+  const rawKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? "";
   if (last && Date.now() - last.at < TTL) return Response.json({ ok: last.ok, cached: true });
 
   const ctrl = new AbortController();
@@ -20,7 +24,7 @@ export async function GET() {
   let status = 0; // HTTP status from Supabase; 0 = no answer (timeout / DNS / network)
   let error = ""; // error class only — messages can echo header values, so they are not returned
   try {
-    const r = await fetch(`${url.replace(/\/$/, "")}/rest/v1/water_points?select=id&limit=1`, {
+    const r = await fetch(`${url}/rest/v1/water_points?select=id&limit=1`, {
       headers: { apikey: key, Authorization: `Bearer ${key}` },
       signal: ctrl.signal,
       cache: "no-store",
@@ -42,7 +46,10 @@ export async function GET() {
   try { project = new URL(url).host.split(".")[0]; } catch { /* malformed URL */ }
   // A key pasted with a stray space or line break makes every request throw
   // before it is sent, so report the key's shape (never the key itself).
-  const keyShape = key !== key.trim() ? "has-whitespace" : !/^[\w.\-]+$/.test(key) ? "bad-characters" : key.startsWith("eyJ") ? "legacy-jwt" : key.startsWith("sb_publishable_") ? "publishable" : "unknown-format";
-  const urlShape = url !== url.trim() ? "has-whitespace" : "ok";
-  return Response.json({ ok, status, error, project, keyShape, urlShape, keyLength: key.length }, { status: ok ? 200 : 503 });
+  // `stored…` describes the values exactly as saved in the hosting dashboard;
+  // the request itself used the cleaned copies from supabaseEnv().
+  const storedKey = rawKey === key ? "clean" : rawKey.trim() !== rawKey ? "has-whitespace" : "has-stray-characters";
+  const storedUrl = rawUrl.replace(/\/+$/, "") === url ? "clean" : "has-whitespace-or-quotes";
+  const keyFormat = key.startsWith("eyJ") ? "legacy-jwt" : key.startsWith("sb_publishable_") ? "publishable" : "unknown";
+  return Response.json({ ok, status, error, project, keyFormat, keyLength: key.length, storedKey, storedUrl }, { status: ok ? 200 : 503 });
 }
