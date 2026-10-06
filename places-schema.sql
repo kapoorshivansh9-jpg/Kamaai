@@ -338,7 +338,9 @@ LANGUAGE sql STABLE SET search_path = '' AS $$
       AND NOT (p.kind = 'society' AND p.name ~* '^(block|tower|pocket|wing|gate)\M')
       AND extensions.st_dwithin(p.geom, me.g, least(greatest(p_radius_km, 0.5), 15) * 1000)
   ), ranked AS (
-    SELECT *, row_number() OVER (PARTITION BY kind ORDER BY d) AS rn FROM near WHERE dup = 1
+    -- A well-known place counts as half as far, so major hubs across the
+    -- search radius are kept even when many small places are closer.
+    SELECT *, row_number() OVER (PARTITION BY kind ORDER BY CASE WHEN notable THEN d / 2 ELSE d END) AS rn FROM near WHERE dup = 1
   )
   SELECT name, kind, lat, lon, round((d / 1000)::numeric, 1), notable
   FROM ranked WHERE rn <= least(greatest(p_limit, 1), 20)

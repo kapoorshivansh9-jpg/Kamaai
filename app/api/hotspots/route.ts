@@ -15,7 +15,7 @@
 
 import { z } from "zod";
 import { supabaseEnv } from "@/lib/supabase-env";
-import { KIND_LABEL, PROF_PLACE_KINDS, PROF_CLUSTER_GROUPS, type Cluster, type PlaceSpot } from "@/lib/places";
+import { KIND_LABEL, PROF_PLACE_KINDS, PROF_CLUSTER_GROUPS, SEARCH_RADIUS_KM, type Cluster, type PlaceSpot } from "@/lib/places";
 
 const Q = z.object({
   lat: z.coerce.number().min(-90).max(90),
@@ -98,8 +98,10 @@ interface PlaceRow { name: string; kind: string; lat: number; lon: number; dist_
 async function fromDatabase(lat: number, lon: number, prof: string): Promise<{ clusters: Cluster[]; spots: PlaceSpot[] } | null> {
   const groups = PROF_CLUSTER_GROUPS[prof] ?? [];
   const [places, ...clusterSets] = await Promise.all([
-    rpc<PlaceRow>("nearby_places", { p_lat: lat, p_lon: lon, p_kinds: PROF_PLACE_KINDS[prof] ?? [], p_radius_km: 6, p_limit: 8 }),
-    ...groups.map((g) => rpc<ClusterRow>("nearby_clusters", { p_lat: lat, p_lon: lon, p_grp: g, p_radius_km: 6, p_limit: 30 })),
+    // Up to 20 of each kind across the whole search radius, so there is enough to
+    // rotate through and to recommend areas well beyond the rider's own block.
+    rpc<PlaceRow>("nearby_places", { p_lat: lat, p_lon: lon, p_kinds: PROF_PLACE_KINDS[prof] ?? [], p_radius_km: SEARCH_RADIUS_KM, p_limit: 20 }),
+    ...groups.map((g) => rpc<ClusterRow>("nearby_clusters", { p_lat: lat, p_lon: lon, p_grp: g, p_radius_km: SEARCH_RADIUS_KM, p_limit: 40 })),
   ]);
   const clusters: Cluster[] = clusterSets.flatMap((rows, i) =>
     (rows ?? []).map((c) => ({
