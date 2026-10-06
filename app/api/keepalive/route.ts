@@ -17,6 +17,7 @@ export async function GET() {
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), 8000);
   let ok = false;
+  let status = 0; // HTTP status from Supabase; 0 = no answer (timeout / DNS / network)
   try {
     const r = await fetch(`${url.replace(/\/$/, "")}/rest/v1/water_points?select=id&limit=1`, {
       headers: { apikey: key, Authorization: `Bearer ${key}` },
@@ -24,12 +25,18 @@ export async function GET() {
       cache: "no-store",
     });
     ok = r.ok;
+    status = r.status;
   } catch {
     ok = false;
   } finally {
     clearTimeout(timer);
   }
-  last = { at: Date.now(), ok };
-  // A failing ping should show up as a failed cron run in the Vercel dashboard.
-  return Response.json({ ok }, { status: ok ? 200 : 503 });
+  // Only remember successes — a failure should be retried on the next call.
+  last = ok ? { at: Date.now(), ok } : null;
+  // The project ref is already public (it is in the browser bundle); showing it
+  // here makes a wrong NEXT_PUBLIC_SUPABASE_URL obvious. A failing ping also
+  // shows up as a failed cron run in the Vercel dashboard.
+  let project = "";
+  try { project = new URL(url).host.split(".")[0]; } catch { /* malformed URL */ }
+  return Response.json({ ok, status, project }, { status: ok ? 200 : 503 });
 }
