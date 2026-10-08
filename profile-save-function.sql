@@ -1,3 +1,6 @@
+-- SUPERSEDED by profile-security.sql (8 Oct 2026), which replaces save_profile()
+-- with a version bound to the signed-in account. Kept for history only.
+
 -- RideKamao — make profile edits actually reach the database.
 -- Run ONCE in Supabase → SQL Editor → New query → Run. Safe to re-run.
 --

@@ -185,34 +185,18 @@ export async function addDarkStore(lat: number, lon: number, brand: DarkBrand, n
 
 export async function saveProfile(profile: RideKamaoProfile) {
   const db = getClient();
-  if (!db || !profile.email) return;
-  const row = {
-    email: profile.email,
-    name: profile.name,
-    profession: profile.profession,
-    language: profile.language,
-    goals: profile.goals,
-    weekly_target: profile.weeklyTarget,
-    updated_at: new Date().toISOString(),
-  };
+  const email = profile.email?.trim().toLowerCase();
+  if (!db || !email) return;
+  // save_profile() (profile-security.sql) is the only way to write a profile;
+  // the table refuses direct inserts and updates from the browser. Signed in,
+  // it saves the account's own row (the email comes from the account). Not
+  // signed in, it can create a new profile but never change an existing one —
+  // the copy on this phone still updates either way.
   try {
-    // Preferred path: the save_profile() database function (see
-    // profile-save-function.sql) inserts or updates in one step. It exists
-    // because the update below can't match rows without read access.
-    const rpc = await db.rpc("save_profile", {
-      p_email: row.email, p_name: row.name, p_profession: row.profession,
-      p_language: row.language, p_goals: row.goals, p_weekly_target: row.weekly_target,
+    await db.rpc("save_profile", {
+      p_email: email, p_name: profile.name, p_profession: profile.profession,
+      p_language: profile.language, p_goals: profile.goals, p_weekly_target: profile.weeklyTarget,
     });
-    if (!rpc.error) return;
-    // Function not installed yet (older database) — fall back to the old path.
-    // Insert first. If the email already exists, the unique constraint fires
-    // (Postgres code 23505) and we update by email instead. We avoid upsert
-    // because ON CONFLICT needs row-read access, which our security rules
-    // (no public SELECT on profiles) intentionally forbid.
-    const { error } = await db.from("profiles").insert(row);
-    if (error && error.code === "23505") {
-      await db.from("profiles").update(row).eq("email", profile.email);
-    }
   } catch {
     // profile sync is best-effort; the app works from localStorage
   }
